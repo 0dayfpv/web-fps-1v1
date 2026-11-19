@@ -863,6 +863,7 @@ export class AIArenaTrainer {
     agent.lastDmgSin = 0;
     agent.lastDmgCos = 0;
     agent.recentDmgTimer = 0;
+    agent.prevDist = 0;
 
     const brain = this.population[agent.brainIndex];
     if (brain) {
@@ -958,12 +959,24 @@ export class AIArenaTrainer {
       nextPop[i] = this.population[indices[i]].clone();
     }
 
-    // Fill remaining 13 via tournament selection + crossover + mutation
+    // Asexual multi-scale elite mutation (avoids RNN hidden-neuron crossover scrambling):
+    // - 5 fine-tuners: tiny weight nudges to sharpen aim & recoil/strafe precision
+    // - 6 medium explorers: discover better peeking, crouching, cover & flank habits
+    // - 2 bold explorers: escape local optima
     for (let i = ELITE_COUNT; i < POPULATION_SIZE; i++) {
-      const parentA = this._tournamentSelect(indices, 3);
-      const parentB = this._tournamentSelect(indices, 3);
-      const child = NeuralNet.crossover(parentA, parentB);
-      child.mutate(MUTATION_RATE, adaptiveSigma);
+      const parent =
+        i < ELITE_COUNT + 5
+          ? this.population[indices[(i - ELITE_COUNT) % ELITE_COUNT]]
+          : this._tournamentSelect(indices, 3);
+      const child = parent.clone();
+
+      if (i < ELITE_COUNT + 5) {
+        child.mutate(0.04, Math.max(0.03, adaptiveSigma * 0.25));
+      } else if (i < ELITE_COUNT + 11) {
+        child.mutate(0.10, Math.max(0.07, adaptiveSigma * 0.65));
+      } else {
+        child.mutate(0.22, Math.max(0.16, adaptiveSigma * 1.25));
+      }
       nextPop[i] = child;
     }
 
@@ -972,7 +985,20 @@ export class AIArenaTrainer {
     this.generation += 1;
     this.killsInGen = 0;
     this.currentBestFitness = 0;
-    this._shufflePairs();
+
+    // Bracketed Swiss-style pairing: top elites duel top challengers for cleaner self-play signal
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+      this.pairOrder[i] = i;
+    }
+    // Lightly shuffle within top half (0..7) and bottom half (8..15)
+    for (const [start, end] of [[0, 8], [8, POPULATION_SIZE]]) {
+      for (let i = end - 1; i > start; i--) {
+        const j = start + Math.floor(Math.random() * (i - start + 1));
+        const tmp = this.pairOrder[i];
+        this.pairOrder[i] = this.pairOrder[j];
+        this.pairOrder[j] = tmp;
+      }
+    }
   }
 
   _buildObservations(agent, enemy, dt) {
@@ -1112,12 +1138,27 @@ export class AIArenaTrainer {
       obs[26 + i] = d / LIDAR_MAX_DIST;
     }
 
-    return { los, cosYawDiff, memoryFreshness, lastSeenCos };
+    return {
+      los,
+      cosYawDiff,
+      pitchDiff,
+      dist3D,
+      frontLidar: obs[21],
+      memoryFreshness,
+      lastSeenCos,
+    };
   }
 
   _stepAgent(agent, enemy, dt, emitFX) {
-    const { los, cosYawDiff, memoryFreshness, lastSeenCos } =
-      this._buildObservations(agent, enemy, dt);
+    const {
+      los,
+      cosYawDiff,
+      pitchDiff,
+      dist3D,
+      frontLidar,
+      memoryFreshness,
+      lastSeenCos,
+    } = this._buildObservations(agent, enemy, dt);
 
     const brain = this.population[agent.brainIndex];
     const out = brain.forward(agent.obs, agent.out);
@@ -1190,43 +1231,57 @@ export class AIArenaTrainer {
     }
 
     // --- Fitness Shaping ---
-    // Line-of-Sight aim alignment shaping (reward steady tracking on target)
-    if (los && cosYawDiff > 0.7) {
-      agent.fitness += 0.045 * cosYawDiff;
-      if (cosYawDiff > 0.94 && Math.abs(agent.yawVel) < 0.8) {
-        agent.fitness += 0.025;
+    // Sharp continuous aim gradient (cos^4 peaks steeply right on target + vertical pitch lock)
+    if (los && cosYawDiff > 0.5) {
+      const yawAlign = Math.pow(cosYawDiff, 4);
+      const pitchAlign = Math.max(0, 1 - Math.abs(pitchDiff) * 3.0);
+      agent.fitness += 0.06 * yawAlign + 0.03 * yawAlign * pitchAlign;
+      if (cosYawDiff > 0.96 && Math.abs(agent.yawVel) < 0.7) {
+        agent.fitness += 0.035;
       }
     }
 
     // Penalize excessive spinning in circles, aim jitter, and extreme vertical staring
     const absYawVel = Math.abs(agent.yawVel);
     if (absYawVel > 1.8) {
-      agent.fitness -= 0.018 * (absYawVel - 1.8);
+      agent.fitness -= 0.022 * (absYawVel - 1.8);
     }
     const yawAccel = Math.abs(agent.yawVel - prevYawVel);
     if (yawAccel > 0.6) {
-      agent.fitness -= 0.012 * yawAccel;
+      agent.fitness -= 0.015 * yawAccel;
     }
     if (Math.abs(agent.pitch) > 0.28) {
-      agent.fitness -= 0.015;
+      agent.fitness -= 0.02;
     }
 
-    // Movement exploration + anti-camping stall penalty
+    // Wall-hugging penalty (stop nose-grinding walls and crates)
     const horizSpeed = physResult.horizSpeed;
-    agent.fitness += 0.008 * Math.min(horizSpeed / 6, 1);
-    if (!los && horizSpeed < 0.35) {
-      agent.fitness -= 0.01;
+    if (frontLidar < 0.08 && forward > 0) {
+      agent.fitness -= 0.04;
     }
 
-    // Tactical cover-seeking when low HP or reloading
-    if ((agent.hp < 35 || agent.reloadTimer > 0) && !los) {
-      agent.fitness += 0.02;
+    // Combat strafe bonus: lateral dodging while keeping crosshair on target
+    if (los && cosYawDiff > 0.88 && right !== 0 && horizSpeed > 2.2) {
+      agent.fitness += 0.05;
     }
 
-    // Tactical memory pre-aim / pursuit toward last-seen enemy cover
-    if (!los && memoryFreshness > 0.2 && lastSeenCos > 0.75) {
-      agent.fitness += 0.015 * lastSeenCos;
+    // Active engagement when healthy & occluded vs. tactical cover when hurt/reloading
+    if (!los) {
+      if (agent.hp < 35 || agent.reloadTimer > 0) {
+        agent.fitness += 0.035;
+      } else {
+        if (agent.prevDist > 0 && dist3D < agent.prevDist - 0.02) {
+          agent.fitness += 0.03;
+        }
+        if (horizSpeed < 0.8) {
+          agent.fitness -= 0.035;
+        }
+      }
+      if (memoryFreshness > 0.2 && lastSeenCos > 0.75) {
+        agent.fitness += 0.02 * lastSeenCos;
+      }
     }
+    agent.prevDist = dist3D;
 
     // --- Hitscan Shooting ---
     let matchEnded = false;
@@ -1235,13 +1290,6 @@ export class AIArenaTrainer {
       agent.fireCooldown = AR_COOLDOWN_SEC;
       if (agent.ammo <= 0) {
         agent.reloadTimer = AR_RELOAD_SEC;
-      }
-
-      // Firing shaping reward / wall-spam penalty
-      if (los && cosYawDiff > 0.92) {
-        agent.fitness += 0.3;
-      } else if (!los) {
-        agent.fitness -= 0.08;
       }
 
       // Compute aim ray + realistic CS2 movement spread
@@ -1306,7 +1354,8 @@ export class AIArenaTrainer {
         const damage = isHead ? AR_WEAPON.headDamage : AR_WEAPON.bodyDamage;
 
         enemy.hp -= damage;
-        agent.fitness += 1.8 * damage + (isHead ? 25 : 0);
+        agent.fitness += (isHead ? 3.5 : 2.5) * damage + (isHead ? 40 : 0);
+        enemy.fitness -= 1.2 * damage;
 
         // Record incoming damage direction in victim's facing frame
         const dmgDx = agent.physics.pos.x - enemy.physics.pos.x;
@@ -1326,8 +1375,8 @@ export class AIArenaTrainer {
         }
 
         if (enemy.hp <= 0) {
-          agent.fitness += 140;
-          enemy.fitness -= 70;
+          agent.fitness += 250;
+          enemy.fitness -= 150;
           agent.kills += 1;
           this.totalKills += 1;
           if (agent === this.agentA) {
@@ -1354,6 +1403,9 @@ export class AIArenaTrainer {
             this._spawnAgent(enemy, respawn);
           }
         }
+      } else {
+        // Missed shot penalty: forces genuine trigger discipline & precision
+        agent.fitness -= los ? 1.6 : 2.2;
       }
 
       if (emitFX) {
