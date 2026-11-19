@@ -635,6 +635,9 @@ function createAgentState(id) {
     physics: new CS2PhysicsController(),
     yaw: 0,
     pitch: 0,
+    yawVel: 0,
+    pitchVel: 0,
+    jumpCooldown: 0,
     hp: PLAYER_CONFIG.MAX_HP,
     ammo: AR_WEAPON.magSize,
     fireCooldown: 0,
@@ -803,6 +806,9 @@ export class AIArenaTrainer {
     agent.physics.reset(spawn.pos);
     agent.yaw = spawn.yaw;
     agent.pitch = 0;
+    agent.yawVel = 0;
+    agent.pitchVel = 0;
+    agent.jumpCooldown = 0;
     agent.hp = PLAYER_CONFIG.MAX_HP;
     agent.ammo = AR_WEAPON.magSize;
     agent.fireCooldown = 0;
@@ -999,15 +1005,27 @@ export class AIArenaTrainer {
     const canAim = !skills || skills.aim;
     const forward = canMove ? (out[0] > 0.25 ? 1 : out[0] < -0.25 ? -1 : 0) : 0;
     const right = canMove ? (out[1] > 0.25 ? 1 : out[1] < -0.25 ? -1 : 0) : 0;
-    const wantsJump = (!skills || skills.jump) && out[2] > 0.45;
-    const wantsCrouch = (!skills || skills.crouch) && out[3] > 0.45;
-    const deltaYaw = canAim ? out[4] * 4.8 * dt : 0;
-    const deltaPitch = canAim ? out[5] * 2.6 * dt : 0;
+    const wantsJump =
+      (!skills || skills.jump) && out[2] > 0.62 && agent.jumpCooldown <= 0;
+    const wantsCrouch = (!skills || skills.crouch) && out[3] > 0.55;
     const wantsShoot = (!skills || skills.shoot) && out[6] > 0.25;
 
-    agent.yaw = normalizeAngle(agent.yaw + deltaYaw);
-    agent.pitch = clamp(agent.pitch + deltaPitch, -PITCH_CLAMP, PITCH_CLAMP);
+    // Smooth human-like angular velocity with deadzone (prevents high-sens screen jitter)
+    const rawYaw = canAim && Math.abs(out[4]) > 0.08 ? out[4] : 0;
+    const rawPitch = canAim && Math.abs(out[5]) > 0.08 ? out[5] : 0;
+    const targetYawVel = rawYaw * 2.8;
+    const targetPitchVel = rawPitch * 1.45;
+    const prevYawVel = agent.yawVel;
+    const aimSmooth = 1 - Math.exp(-11 * dt);
+    agent.yawVel += (targetYawVel - agent.yawVel) * aimSmooth;
+    agent.pitchVel += (targetPitchVel - agent.pitchVel) * aimSmooth;
 
+    agent.yaw = normalizeAngle(agent.yaw + agent.yawVel * dt);
+    agent.pitch = clamp(agent.pitch + agent.pitchVel * dt, -PITCH_CLAMP, PITCH_CLAMP);
+
+    if (agent.jumpCooldown > 0) {
+      agent.jumpCooldown = Math.max(0, agent.jumpCooldown - dt);
+    }
     if (wantsJump) {
       agent.physics.queueJump();
     }
@@ -1020,8 +1038,15 @@ export class AIArenaTrainer {
 
     const physResult = agent.physics.step(dt, agent.physInput, this.colliders);
 
-    if (emitFX && physResult.justJumped && this.onSound) {
-      this.onSound('jump', { bot: agent.id });
+    if (physResult.justJumped) {
+      agent.jumpCooldown = 0.65;
+      // Discourage pointless pogo-stick jumping in place
+      if (physResult.horizSpeed < 2.2) {
+        agent.fitness -= 0.5;
+      }
+      if (emitFX && this.onSound) {
+        this.onSound('jump', { bot: agent.id });
+      }
     }
 
     // Weapon cooldown & auto-reload timers
@@ -1037,9 +1062,22 @@ export class AIArenaTrainer {
     }
 
     // --- Fitness Shaping ---
-    // Line-of-Sight aim alignment shaping
+    // Line-of-Sight aim alignment shaping (reward steady tracking on target)
     if (los && cosYawDiff > 0.7) {
-      agent.fitness += 0.04 * cosYawDiff;
+      agent.fitness += 0.045 * cosYawDiff;
+      if (cosYawDiff > 0.94 && Math.abs(agent.yawVel) < 0.8) {
+        agent.fitness += 0.025;
+      }
+    }
+
+    // Penalize excessive spinning in circles and high-frequency aim jitter
+    const absYawVel = Math.abs(agent.yawVel);
+    if (absYawVel > 1.8) {
+      agent.fitness -= 0.018 * (absYawVel - 1.8);
+    }
+    const yawAccel = Math.abs(agent.yawVel - prevYawVel);
+    if (yawAccel > 0.6) {
+      agent.fitness -= 0.012 * yawAccel;
     }
 
     // Movement exploration + anti-camping stall penalty
