@@ -424,10 +424,14 @@ export class UIManager {
           <div class="ai-ctrl-divider"></div>
 
           <div class="ai-ctrl-actions">
+            <button type="button" id="btn-ai-export" class="ai-ctrl-btn">Dışa Aktar</button>
+            <button type="button" id="btn-ai-import" class="ai-ctrl-btn">İçe Aktar</button>
+            <input type="file" id="ai-import-input" accept=".json,application/json" class="hidden" />
             <button type="button" id="btn-ai-reset" class="ai-ctrl-btn ai-ctrl-btn--warn">Sıfırla</button>
             <button type="button" id="btn-ai-exit" class="ai-ctrl-btn ai-ctrl-btn--danger">Lobiye Dön</button>
           </div>
         </div>
+        <div id="ai-toast" class="ai-toast hidden" role="status"></div>
       </div>
 
       <!-- ESC Pause Menu -->
@@ -797,6 +801,10 @@ export class UIManager {
       aiHpBBar: q('ai-hp-b-bar'),
       aiSpeedButtons: Array.from(document.querySelectorAll('#ai-speed-group [data-ai-speed]')),
       aiCameraButtons: Array.from(document.querySelectorAll('#ai-camera-group [data-ai-camera]')),
+      btnAiExport: q('btn-ai-export'),
+      btnAiImport: q('btn-ai-import'),
+      aiImportInput: q('ai-import-input'),
+      aiToast: q('ai-toast'),
       btnAiReset: q('btn-ai-reset'),
       btnAiExit: q('btn-ai-exit'),
     };
@@ -993,6 +1001,51 @@ export class UIManager {
       });
     }
 
+    this.els.btnAiExport.addEventListener('click', () => {
+      if (!this._callbacks.aiExport) return;
+      try {
+        const model = this._callbacks.aiExport();
+        if (!model) return;
+        const json = JSON.stringify(model, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fps-ai-gen${model.generation || 1}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this._showAIToast(`Model indirildi (Gen #${model.generation || 1})`, false);
+      } catch (err) {
+        this._showAIToast(err?.message || 'Dışa aktarma başarısız.', true);
+      }
+    });
+
+    this.els.btnAiImport.addEventListener('click', () => {
+      this.els.aiImportInput.value = '';
+      this.els.aiImportInput.click();
+    });
+
+    this.els.aiImportInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file || !this._callbacks.aiImport) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result || ''));
+          this._lastAIHistoryLen = -1;
+          this._lastAIStatsKey = '';
+          const info = this._callbacks.aiImport(parsed);
+          const gen = info?.generation || parsed?.generation || 1;
+          this._showAIToast(`Model yüklendi (Gen #${gen})`, false);
+        } catch (err) {
+          this._showAIToast(err?.message || 'Geçersiz model dosyası.', true);
+        }
+      };
+      reader.readAsText(file);
+    });
+
     this.els.btnAiReset.addEventListener('click', () => {
       this._lastAIHistoryLen = -1;
       this._lastAIStatsKey = '';
@@ -1162,6 +1215,28 @@ export class UIManager {
 
   onAIReset(cb) {
     this._callbacks.aiReset = cb;
+  }
+
+  onAIExport(cb) {
+    this._callbacks.aiExport = cb;
+  }
+
+  onAIImport(cb) {
+    this._callbacks.aiImport = cb;
+  }
+
+  _showAIToast(message, isError = false) {
+    if (!this.els.aiToast) return;
+    this.els.aiToast.textContent = message;
+    this.els.aiToast.classList.toggle('error', Boolean(isError));
+    this.els.aiToast.classList.remove('hidden');
+    if (this._aiToastTimer) {
+      clearTimeout(this._aiToastTimer);
+    }
+    this._aiToastTimer = setTimeout(() => {
+      this.els.aiToast.classList.add('hidden');
+      this._aiToastTimer = null;
+    }, 2800);
   }
 
   // ---------------------------------------------------------------------------

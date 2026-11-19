@@ -160,6 +160,63 @@ export class NeuralNet {
     return copy;
   }
 
+  toJSON() {
+    return {
+      inputSize: this.inputSize,
+      hiddenSize: this.hiddenSize,
+      outputSize: this.outputSize,
+      w1: Array.from(this.w1, (v) => Math.round(v * 1e5) / 1e5),
+      b1: Array.from(this.b1, (v) => Math.round(v * 1e5) / 1e5),
+      w2: Array.from(this.w2, (v) => Math.round(v * 1e5) / 1e5),
+      b2: Array.from(this.b2, (v) => Math.round(v * 1e5) / 1e5),
+    };
+  }
+
+  static fromJSON(data) {
+    if (!data || typeof data !== 'object') {
+      throw new Error('Geçersiz sinir ağı verisi.');
+    }
+    const inSize = Number(data.inputSize);
+    const hidSize = Number(data.hiddenSize);
+    const outSize = Number(data.outputSize);
+    if (inSize !== INPUT_SIZE || hidSize !== HIDDEN_SIZE || outSize !== OUTPUT_SIZE) {
+      throw new Error(
+        `Uyumsuz model boyutu (${inSize}x${hidSize}x${outSize}, beklenen ${INPUT_SIZE}x${HIDDEN_SIZE}x${OUTPUT_SIZE}).`
+      );
+    }
+    if (
+      !Array.isArray(data.w1) || data.w1.length !== hidSize * inSize ||
+      !Array.isArray(data.b1) || data.b1.length !== hidSize ||
+      !Array.isArray(data.w2) || data.w2.length !== outSize * hidSize ||
+      !Array.isArray(data.b2) || data.b2.length !== outSize
+    ) {
+      throw new Error('Model ağırlık dizileri eksik veya bozuk.');
+    }
+
+    const net = new NeuralNet(inSize, hidSize, outSize, true);
+    for (let i = 0; i < net.w1.length; i++) {
+      const v = Number(data.w1[i]);
+      if (!Number.isFinite(v)) throw new Error('Geçersiz ağırlık değeri (w1).');
+      net.w1[i] = v;
+    }
+    for (let i = 0; i < net.b1.length; i++) {
+      const v = Number(data.b1[i]);
+      if (!Number.isFinite(v)) throw new Error('Geçersiz ağırlık değeri (b1).');
+      net.b1[i] = v;
+    }
+    for (let i = 0; i < net.w2.length; i++) {
+      const v = Number(data.w2[i]);
+      if (!Number.isFinite(v)) throw new Error('Geçersiz ağırlık değeri (w2).');
+      net.w2[i] = v;
+    }
+    for (let i = 0; i < net.b2.length; i++) {
+      const v = Number(data.b2[i]);
+      if (!Number.isFinite(v)) throw new Error('Geçersiz ağırlık değeri (b2).');
+      net.b2[i] = v;
+    }
+    return net;
+  }
+
   static crossover(a, b) {
     const child = new NeuralNet(
       a.inputSize,
@@ -1275,6 +1332,99 @@ export class AIArenaTrainer {
       botBScore: this.agentB.kills,
       totalKills: this.totalKills,
       history: this.history.slice(),
+    };
+  }
+
+  exportModel() {
+    // Pick best brain from current fitnesses (index 0 is always top elite after Gen 1)
+    let bestIdx = 0;
+    let bestFit = -Infinity;
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+      if (this.fitnesses[i] > bestFit) {
+        bestFit = this.fitnesses[i];
+        bestIdx = i;
+      }
+    }
+
+    return {
+      format: 'web-fps-1v1-ai-v1',
+      exportedAt: new Date().toISOString(),
+      generation: this.generation,
+      bestFitness: Math.round(this.bestFitness * 10) / 10,
+      avgFitness: Math.round(this.avgFitness * 10) / 10,
+      totalKills: this.totalKills,
+      architecture: {
+        inputSize: INPUT_SIZE,
+        hiddenSize: HIDDEN_SIZE,
+        outputSize: OUTPUT_SIZE,
+      },
+      bestBrain: this.population[bestIdx].toJSON(),
+      population: this.population.map((net) => net.toJSON()),
+      history: this.history.slice(),
+    };
+  }
+
+  importModel(data) {
+    if (!data || typeof data !== 'object') {
+      throw new Error('Geçersiz JSON dosyası.');
+    }
+
+    let nextPopulation = null;
+    if (Array.isArray(data.population) && data.population.length > 0) {
+      const parsed = data.population.map((item) => NeuralNet.fromJSON(item));
+      nextPopulation = new Array(POPULATION_SIZE);
+      for (let i = 0; i < POPULATION_SIZE; i++) {
+        if (i < parsed.length) {
+          nextPopulation[i] = parsed[i];
+        } else {
+          const clone = parsed[i % parsed.length].clone();
+          clone.mutate(0.12, 0.18);
+          nextPopulation[i] = clone;
+        }
+      }
+    } else if (data.bestBrain) {
+      const champion = NeuralNet.fromJSON(data.bestBrain);
+      nextPopulation = new Array(POPULATION_SIZE);
+      for (let i = 0; i < POPULATION_SIZE; i++) {
+        const clone = champion.clone();
+        if (i >= 2) {
+          clone.mutate(0.14, 0.2);
+        }
+        nextPopulation[i] = clone;
+      }
+    } else {
+      throw new Error('Dosyada "population" veya "bestBrain" bulunamadı.');
+    }
+
+    this.population = nextPopulation;
+    this.fitnesses.fill(0);
+    this.generation = Math.max(1, Math.round(Number(data.generation) || 1));
+    this.bestFitness = Number.isFinite(Number(data.bestFitness))
+      ? Number(data.bestFitness)
+      : 0;
+    this.avgFitness = Number.isFinite(Number(data.avgFitness))
+      ? Number(data.avgFitness)
+      : 0;
+    this.currentBestFitness = this.bestFitness;
+    this.totalKills = Math.max(0, Math.round(Number(data.totalKills) || 0));
+    this.history = Array.isArray(data.history)
+      ? data.history
+          .map((v) => Number(v))
+          .filter((v) => Number.isFinite(v))
+          .slice(-HISTORY_LIMIT)
+      : [];
+    this.accumulator = 0;
+
+    // Pair top brains first so user immediately sees the loaded champions fight
+    for (let i = 0; i < POPULATION_SIZE; i++) {
+      this.pairOrder[i] = i;
+    }
+    this._startMatch(0);
+    this._syncVisuals(true);
+
+    return {
+      generation: this.generation,
+      bestFitness: Math.round(this.bestFitness * 10) / 10,
     };
   }
 

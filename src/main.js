@@ -362,6 +362,14 @@ ui.onAIReset(() => {
   ui.updateAIStats(aiTrainer.getStats());
 });
 
+ui.onAIExport(() => aiTrainer.exportModel());
+
+ui.onAIImport((data) => {
+  const info = aiTrainer.importModel(data);
+  ui.updateAIStats(aiTrainer.getStats());
+  return info;
+});
+
 // --- Network Events ---
 network.on('connected', () => {
   startMatch();
