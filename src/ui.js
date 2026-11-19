@@ -1598,15 +1598,27 @@ export class UIManager {
     const avgFitStr = Number.isFinite(avgFitNum) ? avgFitNum.toFixed(1) : '0.0';
     const kills = Math.max(0, Math.round(Number(stats.totalKills ?? stats.kills) || 0));
 
-    const scoreA = Math.max(0, Math.round(Number(stats.scoreA ?? stats.botA?.score) || 0));
-    const scoreB = Math.max(0, Math.round(Number(stats.scoreB ?? stats.botB?.score) || 0));
+    const scoreA = Math.max(
+      0,
+      Math.round(Number(stats.botAScore ?? stats.scoreA ?? stats.botA?.score) || 0)
+    );
+    const scoreB = Math.max(
+      0,
+      Math.round(Number(stats.botBScore ?? stats.scoreB ?? stats.botB?.score) || 0)
+    );
     const hpA = Math.max(
       0,
-      Math.min(maxHp, Math.round(Number(stats.hpA ?? stats.botA?.hp ?? maxHp) || 0))
+      Math.min(
+        maxHp,
+        Math.round(Number(stats.botAHP ?? stats.hpA ?? stats.botA?.hp ?? maxHp) || 0)
+      )
     );
     const hpB = Math.max(
       0,
-      Math.min(maxHp, Math.round(Number(stats.hpB ?? stats.botB?.hp ?? maxHp) || 0))
+      Math.min(
+        maxHp,
+        Math.round(Number(stats.botBHP ?? stats.hpB ?? stats.botB?.hp ?? maxHp) || 0)
+      )
     );
 
     const key = `${generation}|${matchNum}/${totalMatches}|${bestFitStr}|${avgFitStr}|${kills}|${scoreA}:${scoreB}|${hpA}|${hpB}`;

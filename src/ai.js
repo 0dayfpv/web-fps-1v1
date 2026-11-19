@@ -716,6 +716,8 @@ export class AIArenaTrainer {
     this.avgFitness = 0;
     this.currentBestFitness = 0;
     this.totalKills = 0;
+    this.totalKillsA = 0;
+    this.totalKillsB = 0;
     this.killsInGen = 0;
     this.history = [];
 
@@ -736,6 +738,8 @@ export class AIArenaTrainer {
     this.avgFitness = 0;
     this.currentBestFitness = 0;
     this.totalKills = 0;
+    this.totalKillsA = 0;
+    this.totalKillsB = 0;
     this.killsInGen = 0;
     this.history = [];
     this._accumulator = 0;
@@ -1138,6 +1142,11 @@ export class AIArenaTrainer {
           enemy.fitness -= 70;
           agent.kills += 1;
           this.totalKills += 1;
+          if (agent === this.agentA) {
+            this.totalKillsA += 1;
+          } else {
+            this.totalKillsB += 1;
+          }
           this.killsInGen += 1;
 
           if (emitFX && this.onSound) {
@@ -1340,8 +1349,8 @@ export class AIArenaTrainer {
       currentBestFitness: Math.round(this.currentBestFitness * 10) / 10,
       botAHP: Math.max(0, Math.round(this.agentA.hp)),
       botBHP: Math.max(0, Math.round(this.agentB.hp)),
-      botAScore: this.agentA.kills,
-      botBScore: this.agentB.kills,
+      botAScore: this.totalKillsA,
+      botBScore: this.totalKillsB,
       totalKills: this.totalKills,
       history: this.history.slice(),
     };
