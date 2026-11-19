@@ -1,5 +1,10 @@
 # 3D Web FPS — Tarayıcı İçi Canlı Yapay Zeka (Self-Play) Eğitim Arenası
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-fps.hamzafpv.com.tr-brightgreen)](https://fps.hamzafpv.com.tr)
+
+> **English Summary:** A zero-asset, browser-based 3D FPS and **real-time in-browser AI Self-Play Neuroevolution arena** built with **Vite, Vanilla JS, Three.js, PeerJS (WebRTC), and Web Audio API**. Watch 16 recurrent neural networks (`28 → 32 Elman RNN → 7`) with last-seen enemy memory, damage-direction sensors, and 2-tier lidar learn to aim, move, take cover, and fight from scratch at `1x–100x` speed — with live skill masking (curriculum learning), real-time fitness telemetry, JSON model export/import, and serverless 1v1 P2P multiplayer.
+
 Tamamen tarayıcı üzerinde çalışan, harici hiçbir 3D model, doku veya ses dosyası gerektirmeyen **gerçek zamanlı yapay zeka eğitim arenası** ve **1v1 P2P tarayıcı FPS oyunu**.
 
 **Vite + Vanilla JS + Three.js + PeerJS + Web Audio API** ile sıfırdan geliştirilmiş olup backend sunucusu olmadan tamamen statik olarak çalışır.
@@ -95,3 +100,9 @@ npm run build
 ```
 
 > Tüm 3D grafikler, fizik hesaplamaları ve yapay zeka eğitimi tamamen kullanıcının kendi tarayıcısında çalışır; sunucu maliyeti veya harici API gerektirmez.
+
+---
+
+## Lisans
+
+Bu proje [MIT Lisansı](LICENSE) ile açık kaynak olarak lisanslanmıştır.
