@@ -2170,37 +2170,7 @@ export class LocalPlayer {
       }
     }
 
-    // Update active tracers
-    for (let i = this.tracers.length - 1; i >= 0; i--) {
-      const tracer = this.tracers[i];
-      tracer.ageMs += dtMs;
-      if (tracer.ageMs >= tracer.durationMs) {
-        this.scene.remove(tracer.mesh);
-        tracer.mesh.geometry.dispose();
-        tracer.mesh.material.dispose();
-        this.tracers.splice(i, 1);
-      } else {
-        tracer.mesh.material.opacity =
-          0.9 * (1 - tracer.ageMs / tracer.durationMs);
-      }
-    }
-
-    // Update impact dust/spark particles
-    for (let i = this.impactParticles.length - 1; i >= 0; i--) {
-      const p = this.impactParticles[i];
-      p.ageMs += dtMs;
-      if (p.ageMs >= p.durationMs) {
-        this.scene.remove(p.mesh);
-        p.mesh.material.dispose();
-        this.impactParticles.splice(i, 1);
-      } else {
-        p.vel.y -= 9.8 * clampedDt;
-        p.mesh.position.addScaledVector(p.vel, clampedDt);
-        const life = 1 - p.ageMs / p.durationMs;
-        p.mesh.material.opacity = life * (p.isSpark ? 0.95 : 0.72);
-        p.mesh.scale.setScalar(p.initialScale * (0.2 + 0.8 * life));
-      }
-    }
+    this.updateEffects(clampedDt);
 
     this._syncCamera();
 
@@ -2239,6 +2209,41 @@ export class LocalPlayer {
         reloadProgress,
       },
     };
+  }
+
+  updateEffects(dt) {
+    const clampedDt = Math.min(dt, 0.05);
+    const dtMs = clampedDt * 1000;
+
+    for (let i = this.tracers.length - 1; i >= 0; i--) {
+      const tracer = this.tracers[i];
+      tracer.ageMs += dtMs;
+      if (tracer.ageMs >= tracer.durationMs) {
+        this.scene.remove(tracer.mesh);
+        tracer.mesh.geometry.dispose();
+        tracer.mesh.material.dispose();
+        this.tracers.splice(i, 1);
+      } else {
+        tracer.mesh.material.opacity =
+          0.9 * (1 - tracer.ageMs / tracer.durationMs);
+      }
+    }
+
+    for (let i = this.impactParticles.length - 1; i >= 0; i--) {
+      const p = this.impactParticles[i];
+      p.ageMs += dtMs;
+      if (p.ageMs >= p.durationMs) {
+        this.scene.remove(p.mesh);
+        p.mesh.material.dispose();
+        this.impactParticles.splice(i, 1);
+      } else {
+        p.vel.y -= 9.8 * clampedDt;
+        p.mesh.position.addScaledVector(p.vel, clampedDt);
+        const life = 1 - p.ageMs / p.durationMs;
+        p.mesh.material.opacity = life * (p.isSpark ? 0.95 : 0.72);
+        p.mesh.scale.setScalar(p.initialScale * (0.2 + 0.8 * life));
+      }
+    }
   }
 
   _syncCamera() {

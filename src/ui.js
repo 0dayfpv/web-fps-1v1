@@ -62,6 +62,11 @@ export class UIManager {
       resume: null,
       leaveRoom: null,
       settingsChange: null,
+      startAI: null,
+      exitAI: null,
+      aiSpeedChange: null,
+      aiCameraChange: null,
+      aiReset: null,
     };
 
     this._settings = this._loadSettings();
@@ -81,6 +86,12 @@ export class UIManager {
     this._scopeVisible = false;
     this._lastWeaponKey = '';
     this._activePauseTab = 'general';
+
+    // Cached AI Training HUD states
+    this._aiSpeed = 1;
+    this._aiCamera = 'overview';
+    this._lastAIHistoryLen = -1;
+    this._lastAIStatsKey = '';
 
     this._render();
     this._bindElements();
@@ -191,6 +202,12 @@ export class UIManager {
                 Katıl
               </button>
             </section>
+          </div>
+
+          <div class="lobby-ai-entry">
+            <button type="button" id="btn-ai-mode" class="btn btn-ai-mode">
+              🤖 AI vs AI — Canlı Makine Öğrenmesi (Sıfırdan Eğitim)
+            </button>
           </div>
 
           <div id="lobby-status" class="lobby-status hidden" role="status"></div>
@@ -307,6 +324,109 @@ export class UIManager {
 
         <div id="respawn-overlay" class="respawn-overlay hidden">
           <div id="respawn-text" class="respawn-text"></div>
+        </div>
+      </div>
+
+      <!-- AI vs AI Live Training HUD Overlay -->
+      <div id="ai-hud" class="hidden">
+        <!-- Top-Left Compact ML Telemetry Card -->
+        <aside class="ai-telemetry-card" aria-label="AI Eğitim Telemetrisi">
+          <div class="ai-card-header">
+            <span class="ai-card-title">AI SELF-PLAY EĞİTİMİ</span>
+            <span id="ai-gen" class="ai-gen-badge">GEN #1</span>
+          </div>
+
+          <div class="ai-stats-grid">
+            <div class="ai-stat-cell">
+              <span class="ai-stat-label">Maç</span>
+              <span id="ai-match" class="ai-stat-value">1/8</span>
+            </div>
+            <div class="ai-stat-cell">
+              <span class="ai-stat-label">En İyi Fitness</span>
+              <span id="ai-best-fit" class="ai-stat-value ai-stat-value--gold">0.0</span>
+            </div>
+            <div class="ai-stat-cell">
+              <span class="ai-stat-label">Ort. Fitness</span>
+              <span id="ai-avg-fit" class="ai-stat-value ai-stat-value--cyan">0.0</span>
+            </div>
+            <div class="ai-stat-cell">
+              <span class="ai-stat-label">Toplam Kill</span>
+              <span id="ai-kills" class="ai-stat-value">0</span>
+            </div>
+          </div>
+
+          <div class="ai-chart-wrap">
+            <div class="ai-chart-header">
+              <span class="ai-chart-label">Fitness Gelişimi</span>
+              <span class="ai-chart-legend">
+                <span class="ai-legend-dot ai-legend-dot--best"></span>En İyi
+                <span class="ai-legend-dot ai-legend-dot--avg"></span>Ort.
+              </span>
+            </div>
+            <canvas id="ai-chart" class="ai-chart-canvas" width="240" height="64"></canvas>
+          </div>
+        </aside>
+
+        <!-- Top-Center Bot Scoreboard -->
+        <div class="ai-scoreboard" aria-label="Bot Skor Tablosu">
+          <div class="ai-bot-side ai-bot-alpha">
+            <div class="ai-bot-meta">
+              <div class="ai-bot-name-row">
+                <span class="ai-bot-name">BOT ALPHA</span>
+                <span id="ai-hp-a-val" class="ai-bot-hp-text">${PLAYER_CONFIG.MAX_HP} HP</span>
+              </div>
+              <div class="ai-bot-hp-track">
+                <div id="ai-hp-a-bar" class="ai-bot-hp-fill" style="width: 100%;"></div>
+              </div>
+            </div>
+            <span id="ai-score-a" class="ai-bot-score">0</span>
+          </div>
+
+          <span class="ai-score-vs">:</span>
+
+          <div class="ai-bot-side ai-bot-beta">
+            <span id="ai-score-b" class="ai-bot-score">0</span>
+            <div class="ai-bot-meta">
+              <div class="ai-bot-name-row">
+                <span id="ai-hp-b-val" class="ai-bot-hp-text">${PLAYER_CONFIG.MAX_HP} HP</span>
+                <span class="ai-bot-name">BOT BETA</span>
+              </div>
+              <div class="ai-bot-hp-track">
+                <div id="ai-hp-b-bar" class="ai-bot-hp-fill" style="width: 100%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom-Center Interactive Control Bar -->
+        <div class="ai-control-bar" role="toolbar" aria-label="AI Eğitim Kontrolleri">
+          <div class="ai-ctrl-group">
+            <span class="ai-ctrl-label">Hız</span>
+            <div class="ai-btn-group" id="ai-speed-group">
+              <button type="button" class="ai-ctrl-btn active" data-ai-speed="1">1x</button>
+              <button type="button" class="ai-ctrl-btn" data-ai-speed="10">10x</button>
+              <button type="button" class="ai-ctrl-btn" data-ai-speed="50">50x</button>
+              <button type="button" class="ai-ctrl-btn" data-ai-speed="100">100x</button>
+            </div>
+          </div>
+
+          <div class="ai-ctrl-divider"></div>
+
+          <div class="ai-ctrl-group">
+            <span class="ai-ctrl-label">Kamera</span>
+            <div class="ai-btn-group" id="ai-camera-group">
+              <button type="button" class="ai-ctrl-btn active" data-ai-camera="overview">Genel</button>
+              <button type="button" class="ai-ctrl-btn" data-ai-camera="botA">Bot A</button>
+              <button type="button" class="ai-ctrl-btn" data-ai-camera="botB">Bot B</button>
+            </div>
+          </div>
+
+          <div class="ai-ctrl-divider"></div>
+
+          <div class="ai-ctrl-actions">
+            <button type="button" id="btn-ai-reset" class="ai-ctrl-btn ai-ctrl-btn--warn">Sıfırla</button>
+            <button type="button" id="btn-ai-exit" class="ai-ctrl-btn ai-ctrl-btn--danger">Lobiye Dön</button>
+          </div>
         </div>
       </div>
 
@@ -593,6 +713,7 @@ export class UIManager {
       btnCopyCode: q('btn-copy-code'),
       joinCodeInput: q('join-code-input'),
       btnJoinRoom: q('btn-join-room'),
+      btnAiMode: q('btn-ai-mode'),
       lobbyStatus: q('lobby-status'),
 
       hud: q('hud'),
@@ -660,6 +781,24 @@ export class UIManager {
 
       btnResume: q('btn-resume'),
       btnLeaveRoom: q('btn-leave-room'),
+
+      aiHud: q('ai-hud'),
+      aiGen: q('ai-gen'),
+      aiMatch: q('ai-match'),
+      aiBestFit: q('ai-best-fit'),
+      aiAvgFit: q('ai-avg-fit'),
+      aiKills: q('ai-kills'),
+      aiChart: q('ai-chart'),
+      aiScoreA: q('ai-score-a'),
+      aiScoreB: q('ai-score-b'),
+      aiHpAVal: q('ai-hp-a-val'),
+      aiHpBVal: q('ai-hp-b-val'),
+      aiHpABar: q('ai-hp-a-bar'),
+      aiHpBBar: q('ai-hp-b-bar'),
+      aiSpeedButtons: Array.from(document.querySelectorAll('#ai-speed-group [data-ai-speed]')),
+      aiCameraButtons: Array.from(document.querySelectorAll('#ai-camera-group [data-ai-camera]')),
+      btnAiReset: q('btn-ai-reset'),
+      btnAiExit: q('btn-ai-exit'),
     };
   }
 
@@ -820,6 +959,54 @@ export class UIManager {
       this._applyCrosshairStyles();
       emitSettingsChange();
     });
+
+    // AI vs AI Training Mode controls
+    this.els.btnAiMode.addEventListener('click', () => {
+      if (this._callbacks.startAI) {
+        this._callbacks.startAI();
+      }
+    });
+
+    for (const btn of this.els.aiSpeedButtons) {
+      btn.addEventListener('click', () => {
+        const speed = Number(btn.dataset.aiSpeed) || 1;
+        this._aiSpeed = speed;
+        for (const b of this.els.aiSpeedButtons) {
+          b.classList.toggle('active', b === btn);
+        }
+        if (this._callbacks.aiSpeedChange) {
+          this._callbacks.aiSpeedChange(speed);
+        }
+      });
+    }
+
+    for (const btn of this.els.aiCameraButtons) {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.aiCamera || 'overview';
+        this._aiCamera = mode;
+        for (const b of this.els.aiCameraButtons) {
+          b.classList.toggle('active', b === btn);
+        }
+        if (this._callbacks.aiCameraChange) {
+          this._callbacks.aiCameraChange(mode);
+        }
+      });
+    }
+
+    this.els.btnAiReset.addEventListener('click', () => {
+      this._lastAIHistoryLen = -1;
+      this._lastAIStatsKey = '';
+      this._drawAISparkline([]);
+      if (this._callbacks.aiReset) {
+        this._callbacks.aiReset();
+      }
+    });
+
+    this.els.btnAiExit.addEventListener('click', () => {
+      if (this._callbacks.exitAI) {
+        this._callbacks.exitAI();
+      }
+    });
   }
 
   _setActivePauseTab(tabName) {
@@ -957,6 +1144,26 @@ export class UIManager {
     this._callbacks.settingsChange = cb;
   }
 
+  onStartAI(cb) {
+    this._callbacks.startAI = cb;
+  }
+
+  onExitAI(cb) {
+    this._callbacks.exitAI = cb;
+  }
+
+  onAISpeedChange(cb) {
+    this._callbacks.aiSpeedChange = cb;
+  }
+
+  onAICameraChange(cb) {
+    this._callbacks.aiCameraChange = cb;
+  }
+
+  onAIReset(cb) {
+    this._callbacks.aiReset = cb;
+  }
+
   // ---------------------------------------------------------------------------
   // Screen & Overlay Controls
   // ---------------------------------------------------------------------------
@@ -965,6 +1172,7 @@ export class UIManager {
     this.els.lobbyOverlay.classList.remove('hidden');
     this.els.hud.classList.add('hidden');
     this.els.pauseMenu.classList.add('hidden');
+    this.els.aiHud.classList.add('hidden');
     this.setScopeVisible(false);
     this.showRespawnCountdown(0);
     this.els.scorePopupFeed.innerHTML = '';
@@ -974,6 +1182,19 @@ export class UIManager {
     this.els.lobbyOverlay.classList.add('hidden');
     this.els.hud.classList.remove('hidden');
     this.els.pauseMenu.classList.add('hidden');
+    this.els.aiHud.classList.add('hidden');
+  }
+
+  showAIMode() {
+    this.els.lobbyOverlay.classList.add('hidden');
+    this.els.hud.classList.add('hidden');
+    this.els.pauseMenu.classList.add('hidden');
+    this.els.aiHud.classList.remove('hidden');
+    this.setScopeVisible(false);
+    this.showRespawnCountdown(0);
+    this._lastAIHistoryLen = -1;
+    this._lastAIStatsKey = '';
+    this._drawAISparkline([]);
   }
 
   showPauseMenu(visible) {
@@ -1229,6 +1450,231 @@ export class UIManager {
     const formatted = Number(seconds).toFixed(1);
     this.els.respawnText.textContent = `ELİMİNE EDİLDİN — ${formatted}s içinde doğuluyor...`;
     this.els.respawnOverlay.classList.remove('hidden');
+  }
+
+  updateAIStats(stats = {}) {
+    if (!stats || typeof stats !== 'object') return;
+
+    const maxHp = PLAYER_CONFIG.MAX_HP;
+    const generation = Math.max(1, Math.round(Number(stats.generation) || 1));
+    const matchNum =
+      stats.match != null
+        ? Math.max(1, Math.round(Number(stats.match) || 1))
+        : stats.matchIndex != null
+          ? Math.max(1, Math.round(Number(stats.matchIndex) || 0) + 1)
+          : 1;
+    const totalMatches = Math.max(
+      1,
+      Math.round(Number(stats.totalMatches ?? stats.matchesPerGen) || 8)
+    );
+    const bestFitNum = Number(stats.bestFitness ?? stats.bestFit);
+    const avgFitNum = Number(stats.avgFitness ?? stats.avgFit);
+    const bestFitStr = Number.isFinite(bestFitNum) ? bestFitNum.toFixed(1) : '0.0';
+    const avgFitStr = Number.isFinite(avgFitNum) ? avgFitNum.toFixed(1) : '0.0';
+    const kills = Math.max(0, Math.round(Number(stats.totalKills ?? stats.kills) || 0));
+
+    const scoreA = Math.max(0, Math.round(Number(stats.scoreA ?? stats.botA?.score) || 0));
+    const scoreB = Math.max(0, Math.round(Number(stats.scoreB ?? stats.botB?.score) || 0));
+    const hpA = Math.max(
+      0,
+      Math.min(maxHp, Math.round(Number(stats.hpA ?? stats.botA?.hp ?? maxHp) || 0))
+    );
+    const hpB = Math.max(
+      0,
+      Math.min(maxHp, Math.round(Number(stats.hpB ?? stats.botB?.hp ?? maxHp) || 0))
+    );
+
+    const key = `${generation}|${matchNum}/${totalMatches}|${bestFitStr}|${avgFitStr}|${kills}|${scoreA}:${scoreB}|${hpA}|${hpB}`;
+    if (key !== this._lastAIStatsKey) {
+      this._lastAIStatsKey = key;
+
+      this.els.aiGen.textContent = `GEN #${generation}`;
+      this.els.aiMatch.textContent = `${matchNum}/${totalMatches}`;
+      this.els.aiBestFit.textContent = bestFitStr;
+      this.els.aiAvgFit.textContent = avgFitStr;
+      this.els.aiKills.textContent = String(kills);
+
+      this.els.aiScoreA.textContent = String(scoreA);
+      this.els.aiScoreB.textContent = String(scoreB);
+      this.els.aiHpAVal.textContent = `${hpA} HP`;
+      this.els.aiHpBVal.textContent = `${hpB} HP`;
+
+      const pctA = (hpA / maxHp) * 100;
+      const pctB = (hpB / maxHp) * 100;
+      this.els.aiHpABar.style.width = `${pctA}%`;
+      this.els.aiHpBBar.style.width = `${pctB}%`;
+      this.els.aiHpABar.classList.toggle('hp-low', hpA <= 30);
+      this.els.aiHpBBar.classList.toggle('hp-low', hpB <= 30);
+    }
+
+    const history = Array.isArray(stats.history) ? stats.history : [];
+    if (history.length !== this._lastAIHistoryLen) {
+      this._lastAIHistoryLen = history.length;
+      this._drawAISparkline(history);
+    }
+  }
+
+  _drawAISparkline(history) {
+    const canvas = this.els.aiChart;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Subtle background horizontal grid
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 3; i++) {
+      const y = Math.round((h * i) / 4) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+
+    if (!history || history.length === 0) {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.58)';
+      ctx.font = '600 10px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('İlk jenerasyon bekleniyor...', w / 2, h / 2);
+      return;
+    }
+
+    const bestVals = [];
+    const avgVals = [];
+    let hasAvg = false;
+
+    for (const item of history) {
+      if (typeof item === 'number' && Number.isFinite(item)) {
+        bestVals.push(item);
+        avgVals.push(null);
+      } else if (item && typeof item === 'object') {
+        const b = Number(item.best ?? item.bestFitness ?? item.max ?? 0);
+        bestVals.push(Number.isFinite(b) ? b : 0);
+        const aRaw = item.avg ?? item.avgFitness;
+        if (aRaw != null && Number.isFinite(Number(aRaw))) {
+          avgVals.push(Number(aRaw));
+          hasAvg = true;
+        } else {
+          avgVals.push(null);
+        }
+      }
+    }
+
+    if (bestVals.length === 0) return;
+
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+    for (let i = 0; i < bestVals.length; i++) {
+      if (bestVals[i] < minVal) minVal = bestVals[i];
+      if (bestVals[i] > maxVal) maxVal = bestVals[i];
+      if (avgVals[i] != null) {
+        if (avgVals[i] < minVal) minVal = avgVals[i];
+        if (avgVals[i] > maxVal) maxVal = avgVals[i];
+      }
+    }
+
+    if (maxVal === minVal) {
+      minVal -= 1;
+      maxVal += 1;
+    }
+
+    const padX = 6;
+    const padTop = 8;
+    const padBottom = 8;
+    const plotW = w - padX * 2;
+    const plotH = h - padTop - padBottom;
+    const range = maxVal - minVal;
+
+    const getX = (idx) =>
+      bestVals.length === 1
+        ? w / 2
+        : padX + (idx / (bestVals.length - 1)) * plotW;
+    const getY = (val) => padTop + (1 - (val - minVal) / range) * plotH;
+
+    // Optional average fitness dashed line
+    if (hasAvg && bestVals.length >= 2) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      let started = false;
+      for (let i = 0; i < avgVals.length; i++) {
+        if (avgVals[i] == null) continue;
+        const x = getX(i);
+        const y = getY(avgVals[i]);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Area gradient fill under best fitness curve
+    if (bestVals.length >= 2) {
+      const fillGrad = ctx.createLinearGradient(0, padTop, 0, h);
+      fillGrad.addColorStop(0, 'rgba(0, 229, 255, 0.28)');
+      fillGrad.addColorStop(0.65, 'rgba(255, 209, 102, 0.1)');
+      fillGrad.addColorStop(1, 'rgba(0, 229, 255, 0.0)');
+
+      ctx.beginPath();
+      ctx.moveTo(getX(0), h - 2);
+      for (let i = 0; i < bestVals.length; i++) {
+        ctx.lineTo(getX(i), getY(bestVals[i]));
+      }
+      ctx.lineTo(getX(bestVals.length - 1), h - 2);
+      ctx.closePath();
+      ctx.fillStyle = fillGrad;
+      ctx.fill();
+
+      // Main bright cyan -> gold line
+      const strokeGrad = ctx.createLinearGradient(padX, 0, w - padX, 0);
+      strokeGrad.addColorStop(0, '#00e5ff');
+      strokeGrad.addColorStop(1, '#ffd166');
+
+      ctx.beginPath();
+      for (let i = 0; i < bestVals.length; i++) {
+        const x = getX(i);
+        const y = getY(bestVals[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = strokeGrad;
+      ctx.lineWidth = 2.1;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+
+    // Highlight latest point with subtle glow
+    const lastIdx = bestVals.length - 1;
+    const lx = getX(lastIdx);
+    const ly = getY(bestVals[lastIdx]);
+    ctx.beginPath();
+    ctx.arc(lx, ly, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 209, 102, 0.28)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(lx, ly, 2.3, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd166';
+    ctx.fill();
+
+    // Subtle peak value label in top-right
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.65)';
+    ctx.font = '700 9px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`max ${maxVal.toFixed(1)}`, w - 4, 2);
   }
 
   getSettings() {

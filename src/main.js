@@ -11,6 +11,7 @@ import { createArena } from './map.js';
 import { LocalPlayer, RemotePlayer } from './player.js';
 import { SoundEngine } from './audio.js';
 import { UIManager } from './ui.js';
+import { AIArenaTrainer } from './ai.js';
 
 // --- Three.js Core Setup ---
 const canvas = document.getElementById('game-canvas');
@@ -42,9 +43,33 @@ const remotePlayer = new RemotePlayer(scene);
 const sound = new SoundEngine();
 const network = new NetworkManager();
 const ui = new UIManager();
+const aiTrainer = new AIArenaTrainer(
+  scene,
+  arena,
+  (origin, endPoint, weaponId) => {
+    localPlayer.spawnTracer(origin, endPoint, weaponId);
+  },
+  (point, normal) => {
+    localPlayer.spawnBulletImpact(point, normal);
+  },
+  (type, data) => {
+    if (type === 'shoot') {
+      sound.playRemoteShoot(10, data?.weaponId || WEAPON_IDS.AR);
+    } else if (type === 'hit') {
+      sound.playHitmarker(Boolean(data?.isHeadshot));
+    } else if (type === 'kill') {
+      sound.playKill();
+    } else if (type === 'jump') {
+      sound.playJump(Boolean(data?.isBhop));
+    }
+  }
+);
 
 remotePlayer.setVisible(false);
 localPlayer.setInputEnabled(false);
+if (localPlayer.weaponGroup) {
+  localPlayer.weaponGroup.visible = false;
+}
 
 // --- Game State ---
 let settings = ui.getSettings();
@@ -52,6 +77,9 @@ localPlayer.setBaseFov(settings.fov);
 sound.setVolume(settings.volume);
 
 let inMatch = false;
+let inAIMode = false;
+let aiSpeed = 1;
+let aiCamMode = 'overview';
 let isPaused = false;
 let isDead = false;
 let isFiring = false;
@@ -122,7 +150,14 @@ function sendCurrentState() {
 }
 
 function startMatch() {
+  if (inAIMode) {
+    inAIMode = false;
+    aiTrainer.setActive(false);
+  }
   inMatch = true;
+  if (localPlayer.weaponGroup) {
+    localPlayer.weaponGroup.visible = true;
+  }
   isDead = false;
   isFiring = false;
   localHP = PLAYER_CONFIG.MAX_HP;
@@ -157,6 +192,8 @@ function startMatch() {
 
 function leaveMatch(statusMessage = '', isError = false) {
   inMatch = false;
+  inAIMode = false;
+  aiTrainer.setActive(false);
   isPaused = false;
   isDead = false;
   isFiring = false;
@@ -164,6 +201,9 @@ function leaveMatch(statusMessage = '', isError = false) {
 
   localPlayer.setADS(false);
   localPlayer.setInputEnabled(false);
+  if (localPlayer.weaponGroup) {
+    localPlayer.weaponGroup.visible = false;
+  }
   remotePlayer.setVisible(false);
   exitLock();
 
@@ -279,6 +319,47 @@ ui.onSettingsChange((nextSettings) => {
   settings = nextSettings;
   localPlayer.setBaseFov(settings.fov);
   sound.setVolume(settings.volume);
+});
+
+ui.onStartAI(() => {
+  sound.unlock();
+  network.disconnect();
+  inMatch = false;
+  isPaused = false;
+  isDead = false;
+  isFiring = false;
+  exitLock();
+
+  remotePlayer.setVisible(false);
+  localPlayer.setInputEnabled(false);
+  if (localPlayer.weaponGroup) {
+    localPlayer.weaponGroup.visible = false;
+  }
+
+  inAIMode = true;
+  aiTrainer.setActive(true);
+  ui.showAIMode();
+  ui.updateAIStats(aiTrainer.getStats());
+});
+
+ui.onExitAI(() => {
+  inAIMode = false;
+  aiTrainer.setActive(false);
+  ui.showLobby();
+  ui.setLobbyStatus('');
+});
+
+ui.onAISpeedChange((speed) => {
+  aiSpeed = speed;
+});
+
+ui.onAICameraChange((mode) => {
+  aiCamMode = mode;
+});
+
+ui.onAIReset(() => {
+  aiTrainer.reset();
+  ui.updateAIStats(aiTrainer.getStats());
 });
 
 // --- Network Events ---
@@ -502,6 +583,11 @@ function animate(now) {
       lastStateSentMs = now;
       sendCurrentState();
     }
+  } else if (inAIMode) {
+    aiTrainer.step(dt, aiSpeed);
+    aiTrainer.applyCamera(camera, aiCamMode);
+    localPlayer.updateEffects(dt);
+    ui.updateAIStats(aiTrainer.getStats());
   } else {
     lobbyOrbitAngle += dt * 0.16;
     camera.position.set(
