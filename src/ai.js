@@ -16,19 +16,21 @@ const MATCH_MAX_TIME_SEC = 12;
 const MATCH_KILL_LIMIT = 3;
 const MAX_HISTORY_POINTS = 60;
 
-const INPUT_SIZE = 18;
-const HIDDEN_SIZE = 24;
+const INPUT_SIZE = 28;
+const HIDDEN_SIZE = 32;
 const OUTPUT_SIZE = 7;
 
 const LIDAR_MAX_DIST = 16;
-const LIDAR_ANGLES = new Float32Array([
+const LOWER_LIDAR_ANGLES = new Float32Array([
   0,
-  (30 * Math.PI) / 180,
-  (-30 * Math.PI) / 180,
-  (65 * Math.PI) / 180,
-  (-65 * Math.PI) / 180,
-  (120 * Math.PI) / 180,
-  (-120 * Math.PI) / 180,
+  (40 * Math.PI) / 180,
+  (-40 * Math.PI) / 180,
+  (90 * Math.PI) / 180,
+  (-90 * Math.PI) / 180,
+]);
+const UPPER_LIDAR_ANGLES = new Float32Array([
+  (-15 * Math.PI) / 180,
+  (15 * Math.PI) / 180,
 ]);
 
 const MUTATION_RATE = 0.18;
@@ -76,8 +78,8 @@ function clamp(v, min, max) {
 }
 
 /**
- * Pure Float32Array 2-layer MLP (18 -> 24 tanh -> 7 tanh) with Xavier init,
- * zero-allocation forward pass, crossover, and Gaussian mutation.
+ * Pure Float32Array Elman Recurrent Neural Network (28 -> 32 tanh + recurrent wh -> 7 tanh)
+ * with Xavier init, zero-allocation forward pass, crossover, and Gaussian mutation.
  */
 export class NeuralNet {
   constructor(
@@ -91,10 +93,12 @@ export class NeuralNet {
     this.outputSize = outputSize;
 
     this.w1 = new Float32Array(hiddenSize * inputSize);
+    this.wh = new Float32Array(hiddenSize * hiddenSize);
     this.b1 = new Float32Array(hiddenSize);
     this.w2 = new Float32Array(outputSize * hiddenSize);
     this.b2 = new Float32Array(outputSize);
     this._hidden = new Float32Array(hiddenSize);
+    this._prevHidden = new Float32Array(hiddenSize);
 
     if (!skipInit) {
       this._initXavier();
@@ -106,6 +110,10 @@ export class NeuralNet {
     for (let i = 0; i < this.w1.length; i++) {
       this.w1[i] = gaussianRandom() * scale1;
     }
+    const scaleH = Math.sqrt(1.0 / this.hiddenSize) * 0.5;
+    for (let i = 0; i < this.wh.length; i++) {
+      this.wh[i] = gaussianRandom() * scaleH;
+    }
     this.b1.fill(0);
 
     const scale2 = Math.sqrt(2.0 / (this.hiddenSize + this.outputSize));
@@ -115,24 +123,37 @@ export class NeuralNet {
     this.b2.fill(0);
   }
 
+  resetState() {
+    this._prevHidden.fill(0);
+    this._hidden.fill(0);
+  }
+
   forward(inputs, out) {
     const inSize = this.inputSize;
     const hidSize = this.hiddenSize;
     const outSize = this.outputSize;
     const w1 = this.w1;
+    const wh = this.wh;
     const b1 = this.b1;
     const w2 = this.w2;
     const b2 = this.b2;
     const hidden = this._hidden;
+    const prevHidden = this._prevHidden;
 
     for (let h = 0; h < hidSize; h++) {
       let sum = b1[h];
-      const rowOffset = h * inSize;
+      const inRowOffset = h * inSize;
       for (let i = 0; i < inSize; i++) {
-        sum += w1[rowOffset + i] * inputs[i];
+        sum += w1[inRowOffset + i] * inputs[i];
+      }
+      const recRowOffset = h * hidSize;
+      for (let j = 0; j < hidSize; j++) {
+        sum += wh[recRowOffset + j] * prevHidden[j];
       }
       hidden[h] = Math.tanh(sum);
     }
+
+    prevHidden.set(hidden);
 
     for (let o = 0; o < outSize; o++) {
       let sum = b2[o];
@@ -154,6 +175,7 @@ export class NeuralNet {
       true
     );
     copy.w1.set(this.w1);
+    copy.wh.set(this.wh);
     copy.b1.set(this.b1);
     copy.w2.set(this.w2);
     copy.b2.set(this.b2);
@@ -166,6 +188,7 @@ export class NeuralNet {
       hiddenSize: this.hiddenSize,
       outputSize: this.outputSize,
       w1: Array.from(this.w1, (v) => Math.round(v * 1e5) / 1e5),
+      wh: Array.from(this.wh, (v) => Math.round(v * 1e5) / 1e5),
       b1: Array.from(this.b1, (v) => Math.round(v * 1e5) / 1e5),
       w2: Array.from(this.w2, (v) => Math.round(v * 1e5) / 1e5),
       b2: Array.from(this.b2, (v) => Math.round(v * 1e5) / 1e5),
@@ -186,6 +209,7 @@ export class NeuralNet {
     }
     if (
       !Array.isArray(data.w1) || data.w1.length !== hidSize * inSize ||
+      !Array.isArray(data.wh) || data.wh.length !== hidSize * hidSize ||
       !Array.isArray(data.b1) || data.b1.length !== hidSize ||
       !Array.isArray(data.w2) || data.w2.length !== outSize * hidSize ||
       !Array.isArray(data.b2) || data.b2.length !== outSize
@@ -198,6 +222,11 @@ export class NeuralNet {
       const v = Number(data.w1[i]);
       if (!Number.isFinite(v)) throw new Error('Geçersiz ağırlık değeri (w1).');
       net.w1[i] = v;
+    }
+    for (let i = 0; i < net.wh.length; i++) {
+      const v = Number(data.wh[i]);
+      if (!Number.isFinite(v)) throw new Error('Geçersiz ağırlık değeri (wh).');
+      net.wh[i] = v;
     }
     for (let i = 0; i < net.b1.length; i++) {
       const v = Number(data.b1[i]);
@@ -227,6 +256,9 @@ export class NeuralNet {
     for (let i = 0; i < child.w1.length; i++) {
       child.w1[i] = Math.random() < 0.5 ? a.w1[i] : b.w1[i];
     }
+    for (let i = 0; i < child.wh.length; i++) {
+      child.wh[i] = Math.random() < 0.5 ? a.wh[i] : b.wh[i];
+    }
     for (let i = 0; i < child.b1.length; i++) {
       child.b1[i] = Math.random() < 0.5 ? a.b1[i] : b.b1[i];
     }
@@ -252,6 +284,7 @@ export class NeuralNet {
       }
     };
     mutateArr(this.w1);
+    mutateArr(this.wh);
     mutateArr(this.b1);
     mutateArr(this.w2);
     mutateArr(this.b2);
@@ -645,6 +678,15 @@ function createAgentState(id) {
     kills: 0,
     fitness: 0,
     brainIndex: 0,
+    // Tactical memory (no wallhacking)
+    hasLastSeen: false,
+    lastSeenX: 0,
+    lastSeenY: 1.5,
+    lastSeenZ: 0,
+    timeSinceSeen: 99,
+    lastDmgSin: 0,
+    lastDmgCos: 0,
+    recentDmgTimer: 0,
     obs: new Float32Array(INPUT_SIZE),
     out: new Float32Array(OUTPUT_SIZE),
     physInput: {
@@ -813,6 +855,19 @@ export class AIArenaTrainer {
     agent.ammo = AR_WEAPON.magSize;
     agent.fireCooldown = 0;
     agent.reloadTimer = 0;
+    agent.hasLastSeen = false;
+    agent.lastSeenX = 0;
+    agent.lastSeenY = 1.5;
+    agent.lastSeenZ = 0;
+    agent.timeSinceSeen = 99;
+    agent.lastDmgSin = 0;
+    agent.lastDmgCos = 0;
+    agent.recentDmgTimer = 0;
+
+    const brain = this.population[agent.brainIndex];
+    if (brain) {
+      brain.resetState();
+    }
   }
 
   _startMatch(matchIdx) {
@@ -828,6 +883,9 @@ export class AIArenaTrainer {
     this.agentB.kills = 0;
     this.agentA.fitness = 0;
     this.agentB.fitness = 0;
+
+    if (this.population[idxA]) this.population[idxA].resetState();
+    if (this.population[idxB]) this.population[idxB].resetState();
 
     const [spawnA, spawnB] = this._pickOppositeSpawns();
     this._spawnAgent(this.agentA, spawnA);
@@ -917,7 +975,7 @@ export class AIArenaTrainer {
     this._shufflePairs();
   }
 
-  _buildObservations(agent, enemy) {
+  _buildObservations(agent, enemy, dt) {
     const obs = agent.obs;
     const phys = agent.physics;
     const ePhys = enemy.physics;
@@ -950,36 +1008,81 @@ export class AIArenaTrainer {
 
     const los = hasLineOfSight(ax, ay, az, ex, eHeadY, ez, this.colliders);
 
-    // 1–2: velocity normalized
+    // Update tactical memory (no wallhacking)
+    if (los) {
+      agent.hasLastSeen = true;
+      agent.lastSeenX = ex;
+      agent.lastSeenY = eHeadY;
+      agent.lastSeenZ = ez;
+      agent.timeSinceSeen = 0;
+    } else {
+      agent.timeSinceSeen += dt;
+    }
+    agent.recentDmgTimer = Math.max(0, agent.recentDmgTimer - dt);
+
+    // 0..1: velocity normalized
     obs[0] = clamp(phys.vel.x / 8, -1, 1);
     obs[1] = clamp(phys.vel.z / 8, -1, 1);
-    // 3: grounded
+    // 2: grounded
     obs[2] = phys.grounded ? 1 : -1;
-    // 4: hp
+    // 3: hp
     obs[3] = agent.hp / PLAYER_CONFIG.MAX_HP;
-    // 5: ammo
+    // 4: ammo
     obs[4] = agent.ammo / AR_WEAPON.magSize;
-    // 6: crouch
+    // 5: crouch
     obs[5] = phys.isCrouching ? 1 : -1;
-    // 7–8: enemy bearing in agent's facing frame
-    obs[6] = sinYawDiff;
-    obs[7] = cosYawDiff;
-    // 9: enemy head pitch diff
-    obs[8] = pitchDiff;
-    // 10: distance to enemy
-    obs[9] = Math.min(dist3D / 40, 1);
-    // 11: real raycast Line-of-Sight
-    obs[10] = los ? 1 : -1;
+    // 6: reloading awareness
+    obs[6] = agent.reloadTimer > 0 ? 1 : -1;
+    // 7..8: arena position
+    obs[7] = clamp(ax / 13, -1, 1);
+    obs[8] = clamp(az / 20, -1, 1);
 
-    // 12–18: 7 horizontal lidar rays at 0°, ±30°, ±65°, ±120°
-    const lidarY = phys.pos.y + Math.min(phys.eyeHeight * 0.72, 1.15);
-    for (let i = 0; i < 7; i++) {
-      const rayYaw = agent.yaw + LIDAR_ANGLES[i];
+    // 9..12: live enemy bearing/pitch/dist (ONLY when los === true, no wallhacking)
+    obs[9] = los ? sinYawDiff : 0;
+    obs[10] = los ? cosYawDiff : 0;
+    obs[11] = los ? pitchDiff : 0;
+    obs[12] = los ? Math.min(dist3D / 40, 1) : 1;
+    // 13: real raycast Line-of-Sight
+    obs[13] = los ? 1 : -1;
+
+    // 14..17: Last-Seen Enemy Memory (in agent's current facing frame)
+    const memoryFreshness = agent.hasLastSeen
+      ? Math.max(0, 1 - agent.timeSinceSeen / 5.0)
+      : 0;
+    let lastSeenSin = 0;
+    let lastSeenCos = 0;
+    let lastSeenDistNorm = 1;
+    if (memoryFreshness > 0) {
+      const ltx = agent.lastSeenX - ax;
+      const lty = agent.lastSeenY - ay;
+      const ltz = agent.lastSeenZ - az;
+      const lastSeenDist = Math.hypot(ltx, lty, ltz);
+      const lastSeenYaw = Math.atan2(-ltx, -ltz);
+      const lastSeenYawDiff = normalizeAngle(lastSeenYaw - agent.yaw);
+      lastSeenSin = Math.sin(lastSeenYawDiff);
+      lastSeenCos = Math.cos(lastSeenYawDiff);
+      lastSeenDistNorm = Math.min(lastSeenDist / 40, 1);
+    }
+    obs[14] = lastSeenSin;
+    obs[15] = lastSeenCos;
+    obs[16] = lastSeenDistNorm;
+    obs[17] = memoryFreshness;
+
+    // 18..20: Incoming Damage Direction Sensor
+    const dmgFresh = clamp(agent.recentDmgTimer / 1.5, 0, 1);
+    obs[18] = dmgFresh > 0 ? agent.lastDmgSin : 0;
+    obs[19] = dmgFresh > 0 ? agent.lastDmgCos : 0;
+    obs[20] = dmgFresh;
+
+    // 21..25: 5 Lower Lidar Rays at 0°, ±40°, ±90° (height pos.y + 0.75m)
+    const lowerLidarY = phys.pos.y + 0.75;
+    for (let i = 0; i < 5; i++) {
+      const rayYaw = agent.yaw + LOWER_LIDAR_ANGLES[i];
       const rdx = -Math.sin(rayYaw);
       const rdz = -Math.cos(rayYaw);
       const d = raycastArenaDist(
         ax,
-        lidarY,
+        lowerLidarY,
         az,
         rdx,
         0,
@@ -987,14 +1090,34 @@ export class AIArenaTrainer {
         LIDAR_MAX_DIST,
         this.colliders
       );
-      obs[11 + i] = d / LIDAR_MAX_DIST;
+      obs[21 + i] = d / LIDAR_MAX_DIST;
     }
 
-    return { los, cosYawDiff };
+    // 26..27: 2 Upper Forward Lidar Rays at -15°, +15° (height pos.y + 1.65m)
+    const upperLidarY = phys.pos.y + 1.65;
+    for (let i = 0; i < 2; i++) {
+      const rayYaw = agent.yaw + UPPER_LIDAR_ANGLES[i];
+      const rdx = -Math.sin(rayYaw);
+      const rdz = -Math.cos(rayYaw);
+      const d = raycastArenaDist(
+        ax,
+        upperLidarY,
+        az,
+        rdx,
+        0,
+        rdz,
+        LIDAR_MAX_DIST,
+        this.colliders
+      );
+      obs[26 + i] = d / LIDAR_MAX_DIST;
+    }
+
+    return { los, cosYawDiff, memoryFreshness, lastSeenCos };
   }
 
   _stepAgent(agent, enemy, dt, emitFX) {
-    const { los, cosYawDiff } = this._buildObservations(agent, enemy);
+    const { los, cosYawDiff, memoryFreshness, lastSeenCos } =
+      this._buildObservations(agent, enemy, dt);
 
     const brain = this.population[agent.brainIndex];
     const out = brain.forward(agent.obs, agent.out);
@@ -1095,6 +1218,16 @@ export class AIArenaTrainer {
       agent.fitness -= 0.01;
     }
 
+    // Tactical cover-seeking when low HP or reloading
+    if ((agent.hp < 35 || agent.reloadTimer > 0) && !los) {
+      agent.fitness += 0.02;
+    }
+
+    // Tactical memory pre-aim / pursuit toward last-seen enemy cover
+    if (!los && memoryFreshness > 0.2 && lastSeenCos > 0.75) {
+      agent.fitness += 0.015 * lastSeenCos;
+    }
+
     // --- Hitscan Shooting ---
     let matchEnded = false;
     if (wantsShoot && agent.fireCooldown <= 0 && agent.reloadTimer <= 0 && agent.ammo > 0) {
@@ -1174,6 +1307,15 @@ export class AIArenaTrainer {
 
         enemy.hp -= damage;
         agent.fitness += 1.8 * damage + (isHead ? 25 : 0);
+
+        // Record incoming damage direction in victim's facing frame
+        const dmgDx = agent.physics.pos.x - enemy.physics.pos.x;
+        const dmgDz = agent.physics.pos.z - enemy.physics.pos.z;
+        const attackerYaw = Math.atan2(-dmgDx, -dmgDz);
+        const dmgYawDiff = normalizeAngle(attackerYaw - enemy.yaw);
+        enemy.lastDmgSin = Math.sin(dmgYawDiff);
+        enemy.lastDmgCos = Math.cos(dmgYawDiff);
+        enemy.recentDmgTimer = 1.5;
 
         if (emitFX && this.onSound) {
           this.onSound('hit', {
@@ -1427,13 +1569,14 @@ export class AIArenaTrainer {
     }
 
     return {
-      format: 'web-fps-1v1-ai-v1',
+      format: 'web-fps-1v1-ai-v2',
       exportedAt: new Date().toISOString(),
       generation: this.generation,
       bestFitness: Math.round(this.bestFitness * 10) / 10,
       avgFitness: Math.round(this.avgFitness * 10) / 10,
       totalKills: this.totalKills,
       architecture: {
+        type: 'elman-rnn',
         inputSize: INPUT_SIZE,
         hiddenSize: HIDDEN_SIZE,
         outputSize: OUTPUT_SIZE,
@@ -1492,16 +1635,16 @@ export class AIArenaTrainer {
       ? data.history
           .map((v) => Number(v))
           .filter((v) => Number.isFinite(v))
-          .slice(-HISTORY_LIMIT)
+          .slice(-MAX_HISTORY_POINTS)
       : [];
-    this.accumulator = 0;
+    this._accumulator = 0;
 
     // Pair top brains first so user immediately sees the loaded champions fight
     for (let i = 0; i < POPULATION_SIZE; i++) {
       this.pairOrder[i] = i;
     }
     this._startMatch(0);
-    this._syncVisuals(true);
+    this._syncVisuals(0.016, true);
 
     if (data.botASkills && typeof data.botASkills === 'object') {
       this.setBotASkills(data.botASkills);

@@ -14,8 +14,8 @@ Tamamen tarayıcı üzerinde çalışan, harici hiçbir 3D model, doku veya ses 
 Projenin ana odağı, iki yapay zeka ajanının **hiçbir önceden tanımlı nişan veya hareket kuralı olmadan**, tamamen rastgele ağırlıklarla başlayıp 3D arena içinde birbirine karşı oynayarak sıfırdan öğrenmesini canlı olarak gözlemlemektir.
 
 ### Nasıl Çalışır?
-- **Sinir Ağı Mimarisi (`src/ai.js`):** Her ajan, saf `Float32Array` tabanlı **2 katmanlı MLP (`18 → 24 tanh → 7 tanh`)** sinir ağına sahiptir.
-- **Gözlem Uzayı (18 Girdi):** Kendi hız/can/cephane/çömelme durumu, rakibin göreli yatay/dikey açısı ve mesafesi, gerçek AABB raycast ile görüş hattı (`Line-of-Sight`) ve engelleri algılamak için **7 yönlü yatay lidar sensörü**.
+- **Sinir Ağı Mimarisi (`src/ai.js`):** Her ajan, saf `Float32Array` tabanlı **kısa süreli hafızalı Elman RNN (`28 → 32 recurrent tanh → 7 tanh`)** sinir ağına sahiptir (`Wh` geri besleme matrisi ile önceki adımların durumunu taşır).
+- **Gözlem Uzayı (28 Girdi):** Kendi hız/can/cephane/reload/çömelme ve arena koordinatı, görüş hattı (`Line-of-Sight`) açıkken canlı rakip açısı/mesafesi, **son görülen rakip konumu hafızası** (5 sn tazelik), **gelen hasar yönü sensörü**, **5 alt seviye + 2 üst seviye lidar** (alçak siper sandığı ile yüksek duvarı ayırt eder).
 - **Eylem Uzayı (7 Çıktı):** İleri/geri, sağ/sol hareket, zıplama, çömelme, yumuşatılmış yatay/dikey bakış kontrolü ve ateş etme.
 - **Evrimsel Öğrenme (Self-Play):** Her jenerasyonda **16 sinir ağı** 1v1 maçlarda eşleşir; hasar, headshot, kill, görüş hattında sakin nişan takibi ve hareket keşfi üzerinden fitness puanı toplar. En başarılı elit beyinler korunur, diğerleri çaprazlama (`crossover`) ve mutasyonla yeni jenerasyonu oluşturur.
 
