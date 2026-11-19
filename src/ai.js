@@ -35,7 +35,7 @@ const MUTATION_RATE = 0.18;
 const BASE_MUTATION_SIGMA = 0.28;
 const MIN_MUTATION_SIGMA = 0.10;
 const WEIGHT_CLAMP = 5.0;
-const PITCH_CLAMP = 1.2;
+const PITCH_CLAMP = 0.42; // ±24° CS2 head-level vertical range (prevents sky/floor staring)
 
 const AR_WEAPON = WEAPONS[WEAPON_IDS.AR];
 const AR_COOLDOWN_SEC = AR_WEAPON.fireCooldownMs / 1000;
@@ -1012,16 +1012,21 @@ export class AIArenaTrainer {
 
     // Smooth human-like angular velocity with deadzone (prevents high-sens screen jitter)
     const rawYaw = canAim && Math.abs(out[4]) > 0.08 ? out[4] : 0;
-    const rawPitch = canAim && Math.abs(out[5]) > 0.08 ? out[5] : 0;
+    const rawPitch = canAim && Math.abs(out[5]) > 0.06 ? out[5] : 0;
     const targetYawVel = rawYaw * 2.8;
-    const targetPitchVel = rawPitch * 1.45;
+    const targetPitch = rawPitch * PITCH_CLAMP;
     const prevYawVel = agent.yawVel;
     const aimSmooth = 1 - Math.exp(-11 * dt);
     agent.yawVel += (targetYawVel - agent.yawVel) * aimSmooth;
-    agent.pitchVel += (targetPitchVel - agent.pitchVel) * aimSmooth;
 
     agent.yaw = normalizeAngle(agent.yaw + agent.yawVel * dt);
-    agent.pitch = clamp(agent.pitch + agent.pitchVel * dt, -PITCH_CLAMP, PITCH_CLAMP);
+    if (canAim) {
+      agent.pitch = clamp(
+        agent.pitch + (targetPitch - agent.pitch) * aimSmooth,
+        -PITCH_CLAMP,
+        PITCH_CLAMP
+      );
+    }
 
     if (agent.jumpCooldown > 0) {
       agent.jumpCooldown = Math.max(0, agent.jumpCooldown - dt);
@@ -1070,7 +1075,7 @@ export class AIArenaTrainer {
       }
     }
 
-    // Penalize excessive spinning in circles and high-frequency aim jitter
+    // Penalize excessive spinning in circles, aim jitter, and extreme vertical staring
     const absYawVel = Math.abs(agent.yawVel);
     if (absYawVel > 1.8) {
       agent.fitness -= 0.018 * (absYawVel - 1.8);
@@ -1078,6 +1083,9 @@ export class AIArenaTrainer {
     const yawAccel = Math.abs(agent.yawVel - prevYawVel);
     if (yawAccel > 0.6) {
       agent.fitness -= 0.012 * yawAccel;
+    }
+    if (Math.abs(agent.pitch) > 0.28) {
+      agent.fitness -= 0.015;
     }
 
     // Movement exploration + anti-camping stall penalty
