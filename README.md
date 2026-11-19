@@ -1,46 +1,42 @@
-# 1v1 Arena FPS — CS2 Fizik + P2P Multiplayer + Canlı AI Self-Play
+# 3D Web FPS — Tarayıcı İçi Canlı Yapay Zeka (Self-Play) Eğitim Arenası
 
-Harici hiçbir 3D model (`.glb`/`.obj`), doku veya ses dosyası gerektirmeyen; **Vite + Vanilla JS + Three.js + PeerJS + Web Audio API** ile sıfırdan prosedürel olarak üretilmiş, tamamen statik deploy edilebilen tarayıcı tabanlı 1v1 FPS oyunu ve **tarayıcı içi canlı Makine Öğrenmesi (Self-Play Neuroevolution)** arenası.
+Tamamen tarayıcı üzerinde çalışan, harici hiçbir 3D model, doku veya ses dosyası gerektirmeyen **gerçek zamanlı yapay zeka eğitim arenası** ve **1v1 P2P tarayıcı FPS oyunu**.
 
-- **Canlı Demo (Vercel):** [https://fps.hamzafpv.com.tr](https://fps.hamzafpv.com.tr)
-- **Yedek Demo (GitHub Pages):** [https://0dayfpv.github.io/web-fps-1v1/](https://0dayfpv.github.io/web-fps-1v1/)
+**Vite + Vanilla JS + Three.js + PeerJS + Web Audio API** ile sıfırdan geliştirilmiş olup backend sunucusu olmadan tamamen statik olarak çalışır.
+
+- **Canlı Demo:** [https://fps.hamzafpv.com.tr](https://fps.hamzafpv.com.tr)
+- **Yedek Link:** [https://0dayfpv.github.io/web-fps-1v1/](https://0dayfpv.github.io/web-fps-1v1/)
 
 ---
 
-## Öne Çıkan Özellikler
+## Yapay Zeka Eğitimi (AI vs AI — Self-Play Neuroevolution)
 
-### 1. CS2 (Source 2) Hareket & Silah Fiziği
-- **Source Air-Strafing & Bunnyhop:** Havada `W` basmadan `A`/`D` + fare dönüşüyle `dot(vel, wishdir)` üzerinden hız kazanımı, `90 ms` zıplama tamponu ve CS2 tarzı soft speed cap (`~285 u/s`).
-- **Silah Bazlı Hareket Hızı:** Bıçak (`250 u/s` en hızlı), Assault Rifle (`~220 u/s`), Sniper (`~200 u/s`).
-- **Counter-Strafing & Crouch-Jump:** Ters yön tuşuna dokununca anında durma ve keskin isabet; havada `Ctrl` ile `1.55 m` sandıklara crouch-jump.
-- **CS2 Deterministik Recoil & Sprey Deseni:** AR için 30 mermilik sprey eğrisi, kamera viewpunch ayrımı, duvar/sandık **mermi izleri (decal)** ve çarpma kıvılcım/toz partikülleri.
+Projenin ana odağı, iki yapay zeka ajanının **hiçbir önceden tanımlı nişan veya hareket kuralı olmadan**, tamamen rastgele ağırlıklarla başlayıp 3D arena içinde birbirine karşı oynayarak sıfırdan öğrenmesini canlı olarak gözlemlemektir.
 
-### 2. Silahlar, İnceleme & Görsel Stil
-- **3 Silah (`1` / `2` / `3`):**
-  - **Assault Rifle (`1`):** Otomatik karabina, red-dot ADS, 30 mermi, deterministik sprey.
-  - **Sniper (`2`):** Zeytin yeşili AWP şasisi, tam ekran dürbün (scope) ADS, `100 HP` tek atan headshot.
-  - **CS2 Terrorist-Side Bıçak (`3`):** İçe açılı Bowie tutuşu, sol tık hızlı savurma (`55 HP` / `100 HP` HS), sağ tık ağır saplama (`100 HP`).
-- **Gerçekçi Birinci Şahıs Eller & `F` İnceleme (Inspect):** Tüm 3 silaha özel taktiksel eldivenli kollar ve `F` tuşuyla CS2 tarzı silah/bıçak inceleme animasyonu.
-- **Source 2 Tarzı Prosedürel PBR Grafikler:** `PMREMGenerator` IBL yansıma haritası, Dust2/Mirage esintili kumtaşı/beton dokular, ahşap & zeytin yeşili mühimmat sandıkları ve yumuşak gün ışığı gölgeleri.
+### Nasıl Çalışır?
+- **Sinir Ağı Mimarisi (`src/ai.js`):** Her ajan, saf `Float32Array` tabanlı **2 katmanlı MLP (`18 → 24 tanh → 7 tanh`)** sinir ağına sahiptir.
+- **Gözlem Uzayı (18 Girdi):** Kendi hız/can/cephane/çömelme durumu, rakibin göreli yatay/dikey açısı ve mesafesi, gerçek AABB raycast ile görüş hattı (`Line-of-Sight`) ve engelleri algılamak için **7 yönlü yatay lidar sensörü**.
+- **Eylem Uzayı (7 Çıktı):** İleri/geri, sağ/sol hareket, zıplama, çömelme, yumuşatılmış yatay/dikey bakış kontrolü ve ateş etme.
+- **Evrimsel Öğrenme (Self-Play):** Her jenerasyonda **16 sinir ağı** 1v1 maçlarda eşleşir; hasar, headshot, kill, görüş hattında sakin nişan takibi ve hareket keşfi üzerinden fitness puanı toplar. En başarılı elit beyinler korunur, diğerleri çaprazlama (`crossover`) ve mutasyonla yeni jenerasyonu oluşturur.
 
-### 3. Sunucusuz 1v1 P2P Multiplayer (PeerJS / WebRTC)
-- Tek tıkla **6 haneli oda kodu** oluşturup arkadaşınla doğrudan tarayıcılar arası (WebRTC DataChannel) 1v1 maç.
-- `state`, `shoot`, `hit` ve `respawn` JSON paketleriyle 30 Hz konum, çömelme, aktif silah, ADS, tracer ve mermi izi senkronizasyonu.
-- `100 HP`, ölüm sonrası `2.0 sn` geri sayım ve rakibe en uzak noktada respawn.
+### Canlı Eğitim Araçları
+- **Hız Kontrolü (`1x` / `10x` / `50x` / `100x`):** `1x` modda ajanları gerçek zamanlı izleyebilir, `50x` veya `100x` turbo modda her karede onlarca simülasyon adımı koşturarak eğitimi saniyeler içinde ileri sarabilirsin *(tüm hızlarda birebir aynı `1/30 sn` sabit fizik adımı çalışır)*.
+- **Canlı Telemetri & Fitness Grafiği:** Jenerasyon numarası, en iyi/ortalama fitness eğrisi, toplam kill ve **Bot Alpha vs Bot Beta** kümülatif skor/HP takibi.
+- **Kamera Modları:** `Genel` (arenayı takip eden izleyici kamerası), `Bot A` gözünden POV ve `Bot B` gözünden POV.
+- **Bot A Yetenek Maskeleme (Curriculum Learning):** Sol üst panelden Bot Alpha için `1. Ateş`, `2. Nişan`, `3. Koşma`, `4. Zıplama`, `5. Çömelme` yeteneklerini canlı açıp kapatabilir, adım adım eğitim veya asimetrik deneyler yapabilirsin *(Bot Beta her zaman tüm yetenekleriyle sabit kalır)*.
+- **Model Dışa & İçe Aktarma (`.json`):** Eğittiğin popülasyonu, en iyi şampiyon sinir ağını, jenerasyon geçmişini ve skill profilini tek tıkla `.json` olarak bilgisayarına indirebilir; daha sonra yükleyerek eğitime kaldığın yerden devam edebilirsin.
 
-### 4. HUD, Ayarlar & Prosedürel Ses
-- Canlı **Speedometer (`u/s`)**, dinamik/statik crosshair, beyaz/kırmızı hitmarker, `+100 KILL` / `+50 HEADSHOT` / `+25 MID-AIR` skor pop-up'ları, sağ üst kompakt **FPS Göstergesi**.
-- **ESC Ayarlar Menüsü (`localStorage` ile kalıcı):**
-  - **Genel:** Mouse Hassasiyeti, ADS Hassasiyeti, FOV, Ses Seviyesi, FPS Göstergesi.
-  - **Crosshair:** Canlı önizleme kutusu, renk paleti + özel renk seçici, uzunluk, kalınlık, boşluk, opaklık, dış çizgi (outline), orta nokta ve dinamik/statik geçişi.
-- **Web Audio API Sentezleyici:** Harici ses dosyası olmadan AR/Sniper/Bıçak, hitmarker, headshot çınlaması, reload, zıplama/bhop ve iniş sesleri.
+---
 
-### 5. AI vs AI — Tarayıcı İçi Canlı Makine Öğrenmesi
-- Lobideki **AI vs AI** moduyla sıfırdan rastgele ağırlıklarla başlayan **16 adet sinir ağı** (`18 → 24 → 7` MLP) gerçek `CS2PhysicsController` ve 7 ışınlı lidar sensörleriyle Self-Play Neuroevolution yöntemiyle birbirine karşı eğitilir.
-- **`1x` / `10x` / `50x` / `100x` Hız Kontrolü:** `100x` turbo modda dakikalar içinde onlarca jenerasyon eğitip `1x`'te canlı izleyebilirsin.
-- **Kamera Modları:** `Genel` (arena takibi), `Bot A` gözünden POV, `Bot B` gözünden POV.
-- **Bot A Skilleri (Action Masking):** `Ateş`, `Nişan`, `Koşma`, `Zıplama`, `Çömelme` yeteneklerini canlı açıp kapatarak adım adım müfredat eğitimi veya asimetrik deneyler yapabilirsin *(Bot B her zaman tam açık kalır)*.
-- **Model Dışa / İçe Aktarma (JSON):** Eğittiğin popülasyonu ve şampiyon sinir ağını `.json` olarak indirip daha sonra kaldığın jenerasyondan geri yükleyebilirsin.
+## 1v1 P2P Tarayıcı Oyunu
+
+Yapay zeka arenasına ek olarak arkadaşınla doğrudan tarayıcı üzerinden 1v1 oynayabilirsin:
+
+- **Sunucusuz Multiplayer (PeerJS / WebRTC):** Tek tıkla **6 haneli oda kodu** oluşturup paylaşarak doğrudan tarayıcılar arası 1v1 maç.
+- **Gelişmiş Hareket & Silah Fiziği:** Air-strafing, bunnyhop, counter-strafing, havada çömelerek yüksek kutulara çıkma (`crouch-jump`), silah bazlı hareket hızları, deterministik geri tepme (recoil) deseni ve duvar/sandıklarda kalıcı mermi izleri.
+- **3 Prosedürel Silah (`1` / `2` / `3`):** Otomatik tüfek (red-dot ADS), keskin nişancı tüfeği (dürbünlü ADS) ve yakın dövüş bıçağı (sol tık hızlı kesme / sağ tık ağır saplama); tüm silahlarda `F` tuşuyla inceleme animasyonu.
+- **Özelleştirilebilir HUD & Kalıcı Ayarlar:** Canlı hız göstergesi (`u/s`), sağ üst kompakt FPS sayacı, canlı önizlemeli **Crosshair özelleştirici** (renk, uzunluk, kalınlık, boşluk, opaklık, dış çizgi, orta nokta, dinamik/statik) ve `localStorage` ile kaydedilen hassasiyet/FOV/ses ayarları.
+- **Prosedürel Görsel & Ses:** Tamamen kodla üretilmiş PBR arena dokuları, çevresel yansıma haritası (`PMREMGenerator`) ve Web Audio API ile sentezlenmiş ses efektleri.
 
 ---
 
@@ -52,10 +48,10 @@ Harici hiçbir 3D model (`.glb`/`.obj`), doku veya ses dosyası gerektirmeyen; *
 | `Space` | Zıplama / Bunnyhop |
 | `Ctrl` / `C` | Çömelme / Havada Crouch-Jump |
 | `Sol Tık` | Ateş Et / Bıçak Hızlı Kesme |
-| `Sağ Tık` | ADS / Sniper Dürbünü / Bıçak Ağır Saplama |
-| `1` / `2` / `3` | Assault Rifle / Sniper / Bıçak |
-| `R` | Şarjör Değiştir (Reload) |
-| `F` | Silah & Bıçak İnceleme (Inspect) |
+| `Sağ Tık` | ADS / Dürbün / Bıçak Ağır Saplama |
+| `1` / `2` / `3` | Otomatik Tüfek / Keskin Nişancı / Bıçak |
+| `R` | Şarjör Değiştir |
+| `F` | Silah & Bıçak İnceleme |
 | `ESC` | Ayarlar & Crosshair Menüsü |
 
 ---
@@ -66,38 +62,36 @@ Harici hiçbir 3D model (`.glb`/`.obj`), doku veya ses dosyası gerektirmeyen; *
 web-fps-1v1/
 ├── index.html          # Uygulama kabuğu (#game-canvas, #ui-root)
 ├── package.json        # Vite, Three.js, PeerJS bağımlılıkları
-├── vite.config.js      # Statik deploy için base: './' yapılandırması
+├── vite.config.js      # Statik deploy yapılandırması
 ├── vercel.json         # Vercel build/output ayarları
 └── src/
-    ├── constants.js    # Fizik, silah, sprey deseni, hitbox ve varsayılan ayarlar
-    ├── physics.js      # Saf CS2 Source 2 hareket, air-strafe, bhop, crouch-jump motoru
-    ├── network.js      # PeerJS WebRTC DataChannel bağlantısı ve paket doğrulayıcı
-    ├── map.js          # Prosedürel PBR CS2 arenası, PMREM IBL yansımalar, collider & spawnlar
-    ├── player.js       # Yerel oyuncu, silah/el viewmodel'leri, inspect, recoil, mermi izi, rakip modeli
-    ├── ai.js           # Tarayıcı içi MLP sinir ağı, Self-Play Neuroevolution, JSON export/import
+    ├── ai.js           # MLP sinir ağı, Self-Play Neuroevolution, skill maskeleme, JSON dışa/içe aktarma
+    ├── physics.js      # Saf 3D hareket, air-strafe, bunnyhop, crouch-jump ve AABB çarpışma motoru
+    ├── constants.js    # Fizik, silah, sprey deseni, hitbox ve varsayılan ayar sabitleri
+    ├── map.js          # Prosedürel PBR 3D arena, IBL yansımalar, çarpışma kutuları ve spawn noktaları
+    ├── player.js       # Yerel oyuncu, silah/el modelleri, inceleme, recoil, mermi izleri, rakip modeli
+    ├── network.js      # PeerJS WebRTC DataChannel bağlantısı ve JSON paket doğrulama
     ├── audio.js        # Web Audio API prosedürel ses sentezleyicisi
-    ├── ui.js           # Lobi, HUD, FPS, Crosshair özelleştirici ve AI eğitim paneli
-    ├── style.css       # HUD, menü ve AI telemetri stilleri
+    ├── ui.js           # Lobi, AI eğitim paneli, canlı grafik, HUD, FPS ve Crosshair özelleştirici
+    ├── style.css       # Arayüz, HUD ve telemetri stilleri
     └── main.js         # Three.js sahne/render döngüsü ve tüm modüllerin orkestratörü
 ```
 
 ---
 
-## Yerel Kurulum ve Geliştirme
+## Yerel Kurulum
 
 ```bash
-# Depoyu klonla
 git clone https://github.com/0dayfpv/web-fps-1v1.git
 cd web-fps-1v1
-
-# Bağımlılıkları yükle
 npm install
-
-# Geliştirme sunucusunu başlat
 npm run dev
+```
 
-# Statik üretim derlemesi oluştur (dist/)
+Statik üretim derlemesi almak için:
+
+```bash
 npm run build
 ```
 
-> **Not:** Tüm oyun ve AI eğitimi tamamen tarayıcı tarafında (client-side) çalışır; herhangi bir backend sunucusu gerektirmez.
+> Tüm 3D grafikler, fizik hesaplamaları ve yapay zeka eğitimi tamamen kullanıcının kendi tarayıcısında çalışır; sunucu maliyeti veya harici API gerektirmez.
