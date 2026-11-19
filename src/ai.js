@@ -1445,6 +1445,19 @@ export class AIArenaTrainer {
     this.visualB.update(dt);
   }
 
+  stepHeadless(tickCount) {
+    if (!this.active) return;
+    const count = Math.min(Math.max(Math.floor(tickCount || 0), 0), 400);
+    for (let i = 0; i < count; i++) {
+      this._stepSimTick(false);
+    }
+  }
+
+  syncVisualsNow() {
+    if (!this.active) return;
+    this._syncVisuals(0.016, true);
+  }
+
   step(dt, speedMultiplier = 1) {
     if (!this.active) return;
 

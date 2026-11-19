@@ -80,6 +80,65 @@ let inMatch = false;
 let inAIMode = false;
 let aiSpeed = 1;
 let aiCamMode = 'overview';
+
+// Background Web Worker ticker so AI training continues uninterrupted in hidden tabs
+let bgWorker = null;
+let bgFallbackTimer = null;
+let lastBgTickMs = 0;
+
+function runBackgroundAITick() {
+  if (!inAIMode || !document.hidden) return;
+  const now = performance.now();
+  const elapsedSec = Math.min(Math.max((now - lastBgTickMs) / 1000, 0), 0.5);
+  lastBgTickMs = now;
+  const ticks = Math.round(elapsedSec * 30 * aiSpeed);
+  if (ticks > 0) {
+    aiTrainer.stepHeadless(ticks);
+  }
+}
+
+function startBackgroundAITicker() {
+  if (bgWorker || bgFallbackTimer) return;
+  lastBgTickMs = performance.now();
+  try {
+    const blob = new Blob(
+      ['setInterval(() => postMessage(0), 50);'],
+      { type: 'application/javascript' }
+    );
+    const url = URL.createObjectURL(blob);
+    bgWorker = new Worker(url);
+    URL.revokeObjectURL(url);
+    bgWorker.onmessage = runBackgroundAITick;
+  } catch {
+    bgFallbackTimer = setInterval(runBackgroundAITick, 100);
+  }
+}
+
+function stopBackgroundAITicker() {
+  if (bgWorker) {
+    bgWorker.terminate();
+    bgWorker = null;
+  }
+  if (bgFallbackTimer) {
+    clearInterval(bgFallbackTimer);
+    bgFallbackTimer = null;
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (inAIMode) {
+      startBackgroundAITicker();
+    }
+  } else {
+    stopBackgroundAITicker();
+    prevTime = performance.now();
+    if (inAIMode) {
+      aiTrainer.syncVisualsNow();
+      ui.updateAIStats(aiTrainer.getStats());
+    }
+  }
+});
 let isPaused = false;
 let isDead = false;
 let isFiring = false;
@@ -344,6 +403,7 @@ ui.onStartAI(() => {
 
 ui.onExitAI(() => {
   inAIMode = false;
+  stopBackgroundAITicker();
   aiTrainer.setActive(false);
   ui.showLobby();
   ui.setLobbyStatus('');
