@@ -365,6 +365,20 @@ export class UIManager {
             </div>
             <canvas id="ai-chart" class="ai-chart-canvas" width="240" height="64"></canvas>
           </div>
+
+          <div class="ai-skills-wrap">
+            <div class="ai-skills-header">
+              <span class="ai-skills-title">BOT A SKİLLERİ</span>
+              <span class="ai-skills-hint">Bot B: Tam Açık</span>
+            </div>
+            <div id="ai-bota-skills" class="ai-skills-grid">
+              <button type="button" class="ai-skill-btn active" data-ai-skill="shoot">1. Ateş</button>
+              <button type="button" class="ai-skill-btn active" data-ai-skill="aim">2. Nişan</button>
+              <button type="button" class="ai-skill-btn active" data-ai-skill="move">3. Koşma</button>
+              <button type="button" class="ai-skill-btn active" data-ai-skill="jump">4. Zıplama</button>
+              <button type="button" class="ai-skill-btn active" data-ai-skill="crouch">5. Çömelme</button>
+            </div>
+          </div>
         </aside>
 
         <!-- Top-Center Bot Scoreboard -->
@@ -801,6 +815,7 @@ export class UIManager {
       aiHpBBar: q('ai-hp-b-bar'),
       aiSpeedButtons: Array.from(document.querySelectorAll('#ai-speed-group [data-ai-speed]')),
       aiCameraButtons: Array.from(document.querySelectorAll('#ai-camera-group [data-ai-camera]')),
+      aiSkillButtons: Array.from(document.querySelectorAll('#ai-bota-skills [data-ai-skill]')),
       btnAiExport: q('btn-ai-export'),
       btnAiImport: q('btn-ai-import'),
       aiImportInput: q('ai-import-input'),
@@ -997,6 +1012,26 @@ export class UIManager {
         }
         if (this._callbacks.aiCameraChange) {
           this._callbacks.aiCameraChange(mode);
+        }
+      });
+    }
+
+    this._botASkills = {
+      shoot: true,
+      aim: true,
+      move: true,
+      jump: true,
+      crouch: true,
+    };
+
+    for (const btn of this.els.aiSkillButtons) {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.aiSkill;
+        if (!key || !(key in this._botASkills)) return;
+        this._botASkills[key] = !this._botASkills[key];
+        btn.classList.toggle('active', this._botASkills[key]);
+        if (this._callbacks.botASkillsChange) {
+          this._callbacks.botASkillsChange({ ...this._botASkills });
         }
       });
     }
@@ -1223,6 +1258,21 @@ export class UIManager {
 
   onAIImport(cb) {
     this._callbacks.aiImport = cb;
+  }
+
+  onBotASkillsChange(cb) {
+    this._callbacks.botASkillsChange = cb;
+  }
+
+  setBotASkillsUI(skills) {
+    if (!skills || typeof skills !== 'object') return;
+    for (const btn of this.els.aiSkillButtons) {
+      const key = btn.dataset.aiSkill;
+      if (key && typeof skills[key] === 'boolean') {
+        this._botASkills[key] = skills[key];
+        btn.classList.toggle('active', skills[key]);
+      }
+    }
   }
 
   _showAIToast(message, isError = false) {

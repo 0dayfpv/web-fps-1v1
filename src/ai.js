@@ -683,6 +683,15 @@ export class AIArenaTrainer {
     this.agentA = createAgentState('botA');
     this.agentB = createAgentState('botB');
 
+    // Toggleable skills for Bot Alpha (Bot Beta keeps all abilities enabled)
+    this.botASkills = {
+      shoot: true,
+      aim: true,
+      move: true,
+      jump: true,
+      crouch: true,
+    };
+
     this.active = false;
     this._accumulator = 0;
     this._orbitAngle = 0.6;
@@ -980,14 +989,17 @@ export class AIArenaTrainer {
     const brain = this.population[agent.brainIndex];
     const out = brain.forward(agent.obs, agent.out);
 
-    // Decode 7 continuous outputs
-    const forward = out[0] > 0.25 ? 1 : out[0] < -0.25 ? -1 : 0;
-    const right = out[1] > 0.25 ? 1 : out[1] < -0.25 ? -1 : 0;
-    const wantsJump = out[2] > 0.45;
-    const wantsCrouch = out[3] > 0.45;
-    const deltaYaw = out[4] * 4.8 * dt;
-    const deltaPitch = out[5] * 2.6 * dt;
-    const wantsShoot = out[6] > 0.25;
+    // Decode 7 continuous outputs (apply Bot Alpha skill mask; Bot Beta untouched)
+    const skills = agent === this.agentA ? this.botASkills : null;
+    const canMove = !skills || skills.move;
+    const canAim = !skills || skills.aim;
+    const forward = canMove ? (out[0] > 0.25 ? 1 : out[0] < -0.25 ? -1 : 0) : 0;
+    const right = canMove ? (out[1] > 0.25 ? 1 : out[1] < -0.25 ? -1 : 0) : 0;
+    const wantsJump = (!skills || skills.jump) && out[2] > 0.45;
+    const wantsCrouch = (!skills || skills.crouch) && out[3] > 0.45;
+    const deltaYaw = canAim ? out[4] * 4.8 * dt : 0;
+    const deltaPitch = canAim ? out[5] * 2.6 * dt : 0;
+    const wantsShoot = (!skills || skills.shoot) && out[6] > 0.25;
 
     agent.yaw = normalizeAngle(agent.yaw + deltaYaw);
     agent.pitch = clamp(agent.pitch + deltaPitch, -PITCH_CLAMP, PITCH_CLAMP);
@@ -1335,6 +1347,19 @@ export class AIArenaTrainer {
     };
   }
 
+  setBotASkills(nextSkills) {
+    if (!nextSkills || typeof nextSkills !== 'object') return;
+    for (const key of ['shoot', 'aim', 'move', 'jump', 'crouch']) {
+      if (typeof nextSkills[key] === 'boolean') {
+        this.botASkills[key] = nextSkills[key];
+      }
+    }
+  }
+
+  getBotASkills() {
+    return { ...this.botASkills };
+  }
+
   exportModel() {
     // Pick best brain from current fitnesses (index 0 is always top elite after Gen 1)
     let bestIdx = 0;
@@ -1361,6 +1386,7 @@ export class AIArenaTrainer {
       bestBrain: this.population[bestIdx].toJSON(),
       population: this.population.map((net) => net.toJSON()),
       history: this.history.slice(),
+      botASkills: { ...this.botASkills },
     };
   }
 
@@ -1422,9 +1448,14 @@ export class AIArenaTrainer {
     this._startMatch(0);
     this._syncVisuals(true);
 
+    if (data.botASkills && typeof data.botASkills === 'object') {
+      this.setBotASkills(data.botASkills);
+    }
+
     return {
       generation: this.generation,
       bestFitness: Math.round(this.bestFitness * 10) / 10,
+      botASkills: this.getBotASkills(),
     };
   }
 

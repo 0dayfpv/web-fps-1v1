@@ -366,8 +366,15 @@ ui.onAIExport(() => aiTrainer.exportModel());
 
 ui.onAIImport((data) => {
   const info = aiTrainer.importModel(data);
+  if (info?.botASkills) {
+    ui.setBotASkillsUI(info.botASkills);
+  }
   ui.updateAIStats(aiTrainer.getStats());
   return info;
+});
+
+ui.onBotASkillsChange((skills) => {
+  aiTrainer.setBotASkills(skills);
 });
 
 // --- Network Events ---
