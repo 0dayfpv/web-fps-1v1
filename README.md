@@ -101,6 +101,8 @@ npm run build
 
 ---
 
-## License
+## License & Copyright
 
-This project is open source and licensed under the [MIT License](LICENSE).
+The source code is licensed under the [MIT License](LICENSE). All personal content, visuals, and branding remain All Rights Reserved.
+
+© 2025–2026 [hamzafpv.com.tr](https://hamzafpv.com.tr) • All rights reserved.

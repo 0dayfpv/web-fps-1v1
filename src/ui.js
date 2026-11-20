@@ -211,6 +211,10 @@ export class UIManager {
           </div>
 
           <div id="lobby-status" class="lobby-status hidden" role="status"></div>
+
+          <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); text-align: center; font-size: 11px; color: rgba(255,255,255,0.55); font-family: monospace;">
+            © 2025–${Math.max(2026, new Date().getFullYear())} <a href="https://hamzafpv.com.tr" target="_blank" rel="noopener noreferrer" style="color: #00e5ff; text-decoration: none; font-weight: 700;">hamzafpv.com.tr</a> • Tüm hakları saklıdır.
+          </div>
         </div>
       </div>
 
