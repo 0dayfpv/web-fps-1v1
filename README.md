@@ -1,90 +1,88 @@
-# 3D Web FPS — Tarayıcı İçi Canlı Yapay Zeka (Self-Play) Eğitim Arenası
+# 3D Web FPS — In-Browser Live AI Self-Play Training Arena
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-fps.hamzafpv.com.tr-brightgreen)](https://fps.hamzafpv.com.tr)
 
-> **English Summary:** A zero-asset, browser-based 3D FPS and **real-time in-browser AI Self-Play Neuroevolution arena** built with **Vite, Vanilla JS, Three.js, PeerJS (WebRTC), and Web Audio API**. Watch 16 recurrent neural networks (`28 → 32 Elman RNN → 7`) with last-seen enemy memory, damage-direction sensors, and 2-tier lidar learn to aim, move, take cover, and fight from scratch at `1x–100x` speed — with live skill masking (curriculum learning), real-time fitness telemetry, JSON model export/import, and serverless 1v1 P2P multiplayer.
+A zero-asset, browser-based **real-time AI Self-Play Neuroevolution training arena** and **1v1 P2P Web FPS** — requiring no external 3D models, textures, or audio files.
 
-Tamamen tarayıcı üzerinde çalışan, harici hiçbir 3D model, doku veya ses dosyası gerektirmeyen **gerçek zamanlı yapay zeka eğitim arenası** ve **1v1 P2P tarayıcı FPS oyunu**.
+Built from scratch with **Vite + Vanilla JS + Three.js + PeerJS (WebRTC) + Web Audio API**, running 100% statically with zero backend server required.
 
-**Vite + Vanilla JS + Three.js + PeerJS + Web Audio API** ile sıfırdan geliştirilmiş olup backend sunucusu olmadan tamamen statik olarak çalışır.
-
-- **Canlı Demo:** [https://fps.hamzafpv.com.tr](https://fps.hamzafpv.com.tr)
-- **Yedek Link:** [https://0dayfpv.github.io/web-fps-1v1/](https://0dayfpv.github.io/web-fps-1v1/)
+- **Live Demo:** [https://fps.hamzafpv.com.tr](https://fps.hamzafpv.com.tr)
+- **Backup Mirror:** [https://0dayfpv.github.io/web-fps-1v1/](https://0dayfpv.github.io/web-fps-1v1/)
 
 ---
 
-## Yapay Zeka Eğitimi (AI vs AI — Self-Play Neuroevolution)
+## AI Training (AI vs AI — Self-Play Neuroevolution)
 
-Projenin ana odağı, iki yapay zeka ajanının **hiçbir önceden tanımlı nişan veya hareket kuralı olmadan**, tamamen rastgele ağırlıklarla başlayıp 3D arena içinde birbirine karşı oynayarak sıfırdan öğrenmesini canlı olarak gözlemlemektir.
+The core focus of this project is watching two AI agents start from completely random weights — with **zero hardcoded aiming or movement rules** — and learn to aim, move, take cover, and duel each other from scratch inside a 3D arena.
 
-### Nasıl Çalışır?
-- **Sinir Ağı Mimarisi (`src/ai.js`):** Her ajan, saf `Float32Array` tabanlı **kısa süreli hafızalı Elman RNN (`28 → 32 recurrent tanh → 7 tanh`)** sinir ağına sahiptir (`Wh` geri besleme matrisi ile önceki adımların durumunu taşır).
-- **Gözlem Uzayı (28 Girdi):** Kendi hız/can/cephane/reload/çömelme ve arena koordinatı, görüş hattı (`Line-of-Sight`) açıkken canlı rakip açısı/mesafesi, **son görülen rakip konumu hafızası** (5 sn tazelik), **gelen hasar yönü sensörü**, **5 alt seviye + 2 üst seviye lidar** (alçak siper sandığı ile yüksek duvarı ayırt eder).
-- **Eylem Uzayı (7 Çıktı):** İleri/geri, sağ/sol hareket, zıplama, çömelme, yumuşatılmış yatay/dikey bakış kontrolü ve ateş etme.
-- **Evrimsel Öğrenme (Self-Play):** Her jenerasyonda **16 sinir ağı** 1v1 maçlarda eşleşir; hasar, headshot, kill, görüş hattında sakin nişan takibi ve hareket keşfi üzerinden fitness puanı toplar. En başarılı elit beyinler korunur, diğerleri çaprazlama (`crossover`) ve mutasyonla yeni jenerasyonu oluşturur.
+### How It Works
+- **Neural Network Architecture (`src/ai.js`):** Each agent uses a pure `Float32Array` **short-term memory Elman RNN (`28 → 32 recurrent tanh → 7 tanh`)** with a recurrent feedback matrix (`Wh`) that carries hidden state across simulation steps.
+- **Observation Space (28 Inputs):** Self velocity, health, ammo, reload/crouch state, and arena coordinates; live relative opponent angle & distance when Line-of-Sight is clear; **last-seen enemy position memory** (5s freshness); **incoming damage direction sensor**; and a **2-tier lidar (5 low + 2 high rays)** to distinguish jumpable cover crates from full walls.
+- **Action Space (7 Outputs):** Forward/backward movement, strafing, jumping, crouching, smoothed horizontal/vertical aiming, and firing.
+- **Evolutionary Self-Play:** Every generation pairs **16 neural networks** in 1v1 matches, scoring fitness on damage, headshots, kills, calm Line-of-Sight tracking, and movement exploration. Top elites are preserved while the rest of the population evolves via crossover and mutation.
 
-### Canlı Eğitim Araçları
-- **Hız Kontrolü (`1x` / `10x` / `50x` / `100x`):** `1x` modda ajanları gerçek zamanlı izleyebilir, `50x` veya `100x` turbo modda her karede onlarca simülasyon adımı koşturarak eğitimi saniyeler içinde ileri sarabilirsin *(tüm hızlarda birebir aynı `1/30 sn` sabit fizik adımı çalışır)*.
-- **Canlı Telemetri & Fitness Grafiği:** Jenerasyon numarası, en iyi/ortalama fitness eğrisi, toplam kill ve **Bot Alpha vs Bot Beta** kümülatif skor/HP takibi.
-- **Kamera Modları:** `Genel` (arenayı takip eden izleyici kamerası), `Bot A` gözünden POV ve `Bot B` gözünden POV.
-- **Bot A Yetenek Maskeleme (Curriculum Learning):** Sol üst panelden Bot Alpha için `1. Ateş`, `2. Nişan`, `3. Koşma`, `4. Zıplama`, `5. Çömelme` yeteneklerini canlı açıp kapatabilir, adım adım eğitim veya asimetrik deneyler yapabilirsin *(Bot Beta her zaman tüm yetenekleriyle sabit kalır)*.
-- **Model Dışa & İçe Aktarma (`.json`):** Eğittiğin popülasyonu, en iyi şampiyon sinir ağını, jenerasyon geçmişini ve skill profilini tek tıkla `.json` olarak bilgisayarına indirebilir; daha sonra yükleyerek eğitime kaldığın yerden devam edebilirsin.
-
----
-
-## 1v1 P2P Tarayıcı Oyunu
-
-Yapay zeka arenasına ek olarak arkadaşınla doğrudan tarayıcı üzerinden 1v1 oynayabilirsin:
-
-- **Sunucusuz Multiplayer (PeerJS / WebRTC):** Tek tıkla **6 haneli oda kodu** oluşturup paylaşarak doğrudan tarayıcılar arası 1v1 maç.
-- **Gelişmiş Hareket & Silah Fiziği:** Air-strafing, bunnyhop, counter-strafing, havada çömelerek yüksek kutulara çıkma (`crouch-jump`), silah bazlı hareket hızları, deterministik geri tepme (recoil) deseni ve duvar/sandıklarda kalıcı mermi izleri.
-- **3 Prosedürel Silah (`1` / `2` / `3`):** Otomatik tüfek (red-dot ADS), keskin nişancı tüfeği (dürbünlü ADS) ve yakın dövüş bıçağı (sol tık hızlı kesme / sağ tık ağır saplama); tüm silahlarda `F` tuşuyla inceleme animasyonu.
-- **Özelleştirilebilir HUD & Kalıcı Ayarlar:** Canlı hız göstergesi (`u/s`), sağ üst kompakt FPS sayacı, canlı önizlemeli **Crosshair özelleştirici** (renk, uzunluk, kalınlık, boşluk, opaklık, dış çizgi, orta nokta, dinamik/statik) ve `localStorage` ile kaydedilen hassasiyet/FOV/ses ayarları.
-- **Prosedürel Görsel & Ses:** Tamamen kodla üretilmiş PBR arena dokuları, çevresel yansıma haritası (`PMREMGenerator`) ve Web Audio API ile sentezlenmiş ses efektleri.
+### Live Training Tools
+- **Speed Controls (`1x` / `10x` / `50x` / `100x`):** Watch agents duel in real time at `1x`, or run dozens of headless physics & neural steps per frame at `50x` / `100x` to fast-forward generations in seconds *(all speeds run the exact same fixed `1/30 s` physics step)*.
+- **Live Telemetry & Fitness Chart:** Real-time generation counter, best/average fitness curve, total kills, and **Bot Alpha vs Bot Beta** cumulative score & HP tracking.
+- **Camera Modes:** `Overview` (arena spectator camera), `Bot A` first-person POV, and `Bot B` first-person POV.
+- **Bot A Skill Masking (Curriculum Learning):** Toggle `1. Fire`, `2. Aim`, `3. Move`, `4. Jump`, and `5. Crouch` live for Bot Alpha from the top-left panel for staged curriculum training or asymmetric experiments *(Bot Beta always retains full capabilities)*.
+- **Model Export & Import (`.json`):** Download the entire trained population, champion brain, generation history, and skill profile as a `.json` file, then reload it anytime to resume training right where you left off.
 
 ---
 
-## Kontroller
+## 1v1 P2P Browser Gameplay
 
-| Tuş / Giriş | İşlev |
+In addition to the AI training arena, you can play 1v1 directly against a friend in the browser:
+
+- **Serverless Multiplayer (PeerJS / WebRTC):** Create a **6-character room code** in one click and share it for direct browser-to-browser 1v1 matches.
+- **Responsive Movement & Weapon Physics:** Air-strafing, bunnyhopping, counter-strafing, mid-air crouch-jumping onto elevated crates, weapon-specific movement speeds, deterministic recoil patterns, and persistent bullet decals on walls and cover.
+- **3 Procedural Weapons (`1` / `2` / `3`):** Automatic Rifle (red-dot ADS), Sniper Rifle (full-screen scope ADS), and Melee Knife (left-click fast slash / right-click heavy stab), all with `F` inspect animations.
+- **Customizable HUD & Persistent Settings:** Live speedometer (`u/s`), compact FPS counter, live-preview **Crosshair Customizer** (color, length, thickness, gap, opacity, outline, center dot, dynamic/static), and `localStorage`-saved sensitivity, FOV, and volume settings.
+- **Procedural Visuals & Audio:** Code-generated PBR arena textures, environment reflection maps (`PMREMGenerator`), and Web Audio API synthesized sound effects.
+
+---
+
+## Controls
+
+| Key / Input | Action |
 | :--- | :--- |
-| `W` `A` `S` `D` | Hareket / Air-Strafing / Counter-Strafing |
-| `Space` | Zıplama / Bunnyhop |
-| `Ctrl` / `C` | Çömelme / Havada Crouch-Jump |
-| `Sol Tık` | Ateş Et / Bıçak Hızlı Kesme |
-| `Sağ Tık` | ADS / Dürbün / Bıçak Ağır Saplama |
-| `1` / `2` / `3` | Otomatik Tüfek / Keskin Nişancı / Bıçak |
-| `R` | Şarjör Değiştir |
-| `F` | Silah & Bıçak İnceleme |
-| `ESC` | Ayarlar & Crosshair Menüsü |
+| `W` `A` `S` `D` | Move / Air-Strafe / Counter-Strafe |
+| `Space` | Jump / Bunnyhop |
+| `Ctrl` / `C` | Crouch / Mid-Air Crouch-Jump |
+| `Left Click` | Fire / Knife Fast Slash |
+| `Right Click` | ADS / Scope / Knife Heavy Stab |
+| `1` / `2` / `3` | Rifle / Sniper / Knife |
+| `R` | Reload |
+| `F` | Weapon & Knife Inspect |
+| `ESC` | Settings & Crosshair Menu |
 
 ---
 
-## Proje Mimarisi
+## Project Architecture
 
 ```text
 web-fps-1v1/
-├── index.html          # Uygulama kabuğu (#game-canvas, #ui-root)
-├── package.json        # Vite, Three.js, PeerJS bağımlılıkları
-├── vite.config.js      # Statik deploy yapılandırması
-├── vercel.json         # Vercel build/output ayarları
+├── index.html          # Application shell (#game-canvas, #ui-root)
+├── package.json        # Vite, Three.js, PeerJS dependencies
+├── vite.config.js      # Static deployment config
+├── vercel.json         # Vercel build/output config
 └── src/
-    ├── ai.js           # MLP sinir ağı, Self-Play Neuroevolution, skill maskeleme, JSON dışa/içe aktarma
-    ├── physics.js      # Saf 3D hareket, air-strafe, bunnyhop, crouch-jump ve AABB çarpışma motoru
-    ├── constants.js    # Fizik, silah, sprey deseni, hitbox ve varsayılan ayar sabitleri
-    ├── map.js          # Prosedürel PBR 3D arena, IBL yansımalar, çarpışma kutuları ve spawn noktaları
-    ├── player.js       # Yerel oyuncu, silah/el modelleri, inceleme, recoil, mermi izleri, rakip modeli
-    ├── network.js      # PeerJS WebRTC DataChannel bağlantısı ve JSON paket doğrulama
-    ├── audio.js        # Web Audio API prosedürel ses sentezleyicisi
-    ├── ui.js           # Lobi, AI eğitim paneli, canlı grafik, HUD, FPS ve Crosshair özelleştirici
-    ├── style.css       # Arayüz, HUD ve telemetri stilleri
-    └── main.js         # Three.js sahne/render döngüsü ve tüm modüllerin orkestratörü
+    ├── ai.js           # Elman RNN, Self-Play Neuroevolution, skill masking, JSON export/import
+    ├── physics.js      # Pure 3D movement, air-strafe, bunnyhop, crouch-jump & AABB collision engine
+    ├── constants.js    # Physics, weapon, recoil, hitbox & default settings constants
+    ├── map.js          # Procedural PBR 3D arena, IBL reflections, colliders & spawn points
+    ├── player.js       # Local player, procedural weapons/hands, inspect, recoil, decals & remote player
+    ├── network.js      # PeerJS WebRTC DataChannel connection & JSON packet validation
+    ├── audio.js        # Web Audio API procedural sound synthesizer
+    ├── ui.js           # Lobby, AI training dashboard, live chart, HUD, FPS & Crosshair customizer
+    ├── style.css       # UI, HUD & telemetry styles
+    └── main.js         # Three.js scene/render loop & module orchestrator
 ```
 
 ---
 
-## Yerel Kurulum
+## Local Development
 
 ```bash
 git clone https://github.com/0dayfpv/web-fps-1v1.git
@@ -93,16 +91,16 @@ npm install
 npm run dev
 ```
 
-Statik üretim derlemesi almak için:
+To create a static production build:
 
 ```bash
 npm run build
 ```
 
-> Tüm 3D grafikler, fizik hesaplamaları ve yapay zeka eğitimi tamamen kullanıcının kendi tarayıcısında çalışır; sunucu maliyeti veya harici API gerektirmez.
+> All 3D rendering, physics calculations, and AI training run entirely in the user's browser — zero server cost and no external API keys required.
 
 ---
 
-## Lisans
+## License
 
-Bu proje [MIT Lisansı](LICENSE) ile açık kaynak olarak lisanslanmıştır.
+This project is open source and licensed under the [MIT License](LICENSE).
